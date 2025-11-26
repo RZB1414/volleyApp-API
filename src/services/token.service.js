@@ -8,12 +8,11 @@ const DOWNLOAD_TOKEN_TTL_SECONDS = Number.parseInt(
   10
 );
 
-export async function createDownloadToken({ userId, fileName }) {
-  const presignedUrl = await createPresignedDownload(fileName, DOWNLOAD_TOKEN_TTL_SECONDS);
-
+export async function createDownloadToken({ userId, fileName, uploadedAt }) {
   const token = nanoid(32);
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + DOWNLOAD_TOKEN_TTL_SECONDS * 1000);
+  const videoUploadedAt = uploadedAt ?? createdAt;
 
   const collection = getDownloadTokensCollection();
 
@@ -21,54 +20,35 @@ export async function createDownloadToken({ userId, fileName }) {
     token,
     userId,
     fileName,
-    presignedUrl,
-    used: false,
     createdAt,
-    expiresAt
+    expiresAt,
+    videoUploadedAt
   });
 
-  return { token };
+  return { token, videoUploadedAt };
 }
 
 export async function consumeDownloadToken(token) {
   const now = new Date();
   const collection = getDownloadTokensCollection();
 
-  const result = await collection.findOneAndUpdate(
-    {
-      token,
-      used: false,
-      expiresAt: { $gt: now }
-    },
-    {
-      $set: { used: true, usedAt: now }
-    },
-    {
-      returnDocument: 'before'
-    }
-  );
+  const record = await collection.findOne({ token });
 
-  if (!result.value) {
-    const existing = await collection.findOne({ token });
-
-    if (!existing) {
-      return { status: 'not_found' };
-    }
-
-    if (existing.used) {
-      return { status: 'already_used' };
-    }
-
-    if (existing.expiresAt <= now) {
-      return { status: 'expired' };
-    }
-
-    return { status: 'invalid' };
+  if (!record) {
+    return { status: 'not_found' };
   }
+
+  if (record.expiresAt <= now) {
+    return { status: 'expired' };
+  }
+
+  const presignedUrl = await createPresignedDownload(record.fileName, DOWNLOAD_TOKEN_TTL_SECONDS);
 
   return {
     status: 'ok',
-    fileName: result.value.fileName,
-    presignedUrl: result.value.presignedUrl
+    fileName: record.fileName,
+    presignedUrl,
+    expiresAt: record.expiresAt,
+    uploadedAt: record.videoUploadedAt ?? record.createdAt
   };
 }

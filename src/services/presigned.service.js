@@ -4,6 +4,7 @@ import {
   CreateMultipartUploadCommand,
   GetObjectCommand,
   ListMultipartUploadsCommand,
+  ListObjectsV2Command,
   UploadPartCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -129,4 +130,34 @@ export async function listIncompleteMultipartUploads({ userId, maxUploads = 50 }
     uploadId: upload.UploadId,
     initiatedAt: upload.Initiated
   }));
+}
+
+export async function listCompletedUploads({ userId, maxKeys = 50, continuationToken } = {}) {
+  if (!userId) {
+    throw new Error('userId is required');
+  }
+
+  const normalizedLimit = Number.parseInt(maxKeys, 10);
+  const limit = Number.isNaN(normalizedLimit) || normalizedLimit <= 0 ? 50 : normalizedLimit;
+
+  const command = new ListObjectsV2Command({
+    Bucket: bucketName,
+    Prefix: `${userId}/`,
+    MaxKeys: limit,
+    ContinuationToken: continuationToken
+  });
+
+  const { Contents, IsTruncated, NextContinuationToken } = await r2.send(command);
+
+  return {
+    objects:
+      Contents?.map((object) => ({
+        key: object.Key,
+        size: object.Size,
+        lastModified: object.LastModified,
+        etag: object.ETag
+      })) ?? [],
+    isTruncated: Boolean(IsTruncated),
+    nextContinuationToken: NextContinuationToken ?? null
+  };
 }

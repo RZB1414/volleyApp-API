@@ -2,8 +2,6 @@ import { ObjectId } from 'mongodb';
 
 import { getUsersCollection } from '../db/mongo.js';
 
-export const USER_ROLES = ['statistic', 'coach', 'auxiliar coach', 'athlete', 'other'];
-
 function mapUser(userDoc) {
   if (!userDoc) {
     return null;
@@ -16,21 +14,33 @@ function mapUser(userDoc) {
     name: userDoc.name,
     email: userDoc.email,
     age: userDoc.age,
-    role: userDoc.role,
+    yearsAsAProfessional: userDoc.yearsAsAProfessional ?? null,
+    actualTeam: userDoc.actualTeam ?? null,
+    country: userDoc.country ?? null,
     createdAt: userDoc.createdAt,
     updatedAt: userDoc.updatedAt
   };
 }
 
-export async function createUser({ name, email, age, role, passwordHash }) {
+export async function createUser({
+  name,
+  email,
+  age,
+  passwordHash,
+  actualTeam,
+  country,
+  yearsAsAProfessional
+}) {
   const users = getUsersCollection();
   const now = new Date();
   const doc = {
     name,
     email,
     age,
-    role,
     passwordHash,
+    actualTeam: actualTeam ?? null,
+    country: country ?? null,
+    yearsAsAProfessional: yearsAsAProfessional ?? null,
     createdAt: now,
     updatedAt: now
   };

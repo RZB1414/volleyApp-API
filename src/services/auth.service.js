@@ -58,7 +58,10 @@ function getRefreshTokenSecret() {
 }
 
 export function generateTokens(user) {
-  const payload = { id: user.id, role: user.role };
+  const payload = {
+    id: user.id,
+    yearsAsAProfessional: user.yearsAsAProfessional ?? null
+  };
 
   const accessToken = jwt.sign(payload, getAccessTokenSecret(), {
     expiresIn: ACCESS_EXPIRES_IN

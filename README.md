@@ -1,6 +1,6 @@
 # Volley Plus API
 
-Node.js REST API built with Express for handling authenticated uploads to Cloudflare R2 and one-time download links managed via MongoDB.
+Node.js REST API built with Express for handling authenticated uploads to Cloudflare R2 and expiring download links managed via MongoDB.
 
 ## Requirements
 
@@ -32,15 +32,17 @@ copy .env.example .env
 ## Endpoints
 
 - `GET /health`: returns basic API health information
-- `POST /auth/register`: creates a user (requires `name`, `email`, `password`, `role`, optional `age` 10-100)
+- `POST /auth/register`: creates a user (requires `name`, `email`, `password`, optional `age` 10-100, plus optional metadata like `actualTeam`, `country`, `yearsAsAProfessional`)
 - `POST /auth/login`: returns a demo token for the provided `userId`
 - `GET /auth/me`: returns the authenticated user extracted from headers
 - `POST /upload/multipart`: generates presigned URLs for multipart uploads (requires `x-user-id` header)
 - `POST /upload/multipart/complete`: finalises multipart uploads with part metadata
 - `POST /upload/multipart/cancel`: aborts multipart uploads
+- `DELETE /upload/multipart/pending/:uploadId`: alternative shortcut for aborting a pending upload by `uploadId` (provide `fileKey` or `fileName` via query string)
 - `GET /upload/multipart/pending`: lists current multipart uploads that have not been completed yet (filtered by `x-user-id`)
-- `POST /download/generate`: creates a one-time download link stored in MongoDB
-- `GET /download/use/:token`: consumes a token and redirects to the R2 presigned URL
+- `GET /upload/multipart/completed`: lists fully uploaded objects for the authenticated user, with optional pagination via `limit` and `continuationToken`
+- `POST /download/generate`: creates a reusable (until expiry) download token stored in MongoDB (accepts optional `uploadedAt` timestamp from the frontend)
+- `GET /download/use/:token`: uses a token to fetch a fresh presigned URL and redirects to it while the token remains valid
 
 ### Multipart upload request body
 
@@ -52,7 +54,20 @@ copy .env.example .env
 
 The response echoes `partCount`, `chunkSizeBytes`, and a `fileKey` that includes the authenticated `userId` as a prefix (`<userId>/<originalName>`). Use that `fileKey` for `/upload/multipart/complete`, `/upload/multipart/cancel`, and when generating download tokens so each object stays namespaced per user. The object metadata also stores the `userId` for traceability.
 
-Call `GET /upload/multipart/pending` (with the same auth headers) to inspect any multipart uploads that are still open for that user. Optional query `?limit=25` adjusts how many records the API asks from Cloudflare R2 (defaults to 50) and returns an array of `{ key, uploadId, initiatedAt }`.
+Call `GET /upload/multipart/pending` (with the same auth headers) to inspect any multipart uploads that are still open for that user. Optional query `?limit=25` adjusts how many records the API asks from Cloudflare R2 (defaults to 50) and returns an array of `{ key, uploadId, initiatedAt }`. To remove one of those entries from the UI, hit `DELETE /upload/multipart/pending/<uploadId>?fileKey=<key>`, which internally reuses the same cancellation logic as the POST endpoint but is easier to wire from the frontend list view.
+
+Use `GET /upload/multipart/completed` to enumerate finished objects (`{ key, size, lastModified, etag }`). Provide `?limit=25` and/or `?continuationToken=...` if you need to page through large collections.
+
+### Download token request body
+
+`POST /download/generate` accepts:
+
+- `fileName` (string, required): the R2 key (e.g. `user123/video.mp4`).
+- `uploadedAt` (ISO string, optional): original video creation/upload timestamp coming from the frontend UI. When omitted the API stores the current timestamp.
+
+The response includes the generated token URL, TTL, and the normalized `uploadedAt` value returned in ISO format so the client can render consistent metadata without recomputing it.
+
+Download tokens are no longer single-use. Generating a link stores the file reference, expiry timestamp, and the supplied `uploadedAt` metadata; every call to `GET /download/use/:token` verifies the token is still valid and then issues a brand-new presigned URL. Once the configured TTL elapses the token expires automatically (HTTP 410), keeping access scoped without forcing users to request a new link for each download attempt.
 
 ## Development
 

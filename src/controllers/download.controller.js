@@ -6,20 +6,32 @@ export async function generateDownloadLink(req, res, next) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const { fileName } = req.body;
+    const { fileName, uploadedAt } = req.body;
 
     if (!fileName) {
       return res.status(400).json({ message: 'fileName is required' });
     }
 
-    const { token } = await createDownloadToken({
+    let normalizedUploadedAt;
+
+    if (uploadedAt !== undefined && uploadedAt !== null) {
+      const parsedDate = new Date(uploadedAt);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'uploadedAt must be a valid date string' });
+      }
+      normalizedUploadedAt = parsedDate;
+    }
+
+    const { token, videoUploadedAt } = await createDownloadToken({
       userId: req.user.id,
-      fileName
+      fileName,
+      uploadedAt: normalizedUploadedAt
     });
 
     return res.status(201).json({
       url: `/download/use/${token}`,
-      expiresInSeconds: Number.parseInt(process.env.DOWNLOAD_TOKEN_TTL_SECONDS ?? '300', 10)
+      expiresInSeconds: Number.parseInt(process.env.DOWNLOAD_TOKEN_TTL_SECONDS ?? '300', 10),
+      uploadedAt: videoUploadedAt?.toISOString()
     });
   } catch (error) {
     return next(error);
@@ -34,10 +46,6 @@ export async function useDownloadLink(req, res, next) {
 
     if (result.status === 'not_found') {
       return res.status(404).json({ message: 'Token not found' });
-    }
-
-    if (result.status === 'already_used') {
-      return res.status(409).json({ message: 'Token already used' });
     }
 
     if (result.status === 'expired') {

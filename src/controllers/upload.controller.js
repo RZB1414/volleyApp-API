@@ -2,6 +2,7 @@ import {
   abortMultipartUpload,
   completeMultipartUpload,
   createMultipartUploadUrls,
+  listCompletedUploads as listCompletedUploadsService,
   listIncompleteMultipartUploads
 } from '../services/presigned.service.js';
 
@@ -121,10 +122,13 @@ export async function finalizeMultipartUpload(req, res, next) {
 
 export async function cancelMultipartUpload(req, res, next) {
   try {
-    const { fileName, fileKey, uploadId } = req.body;
+    const fileName =
+      req.body?.fileName ?? req.query?.fileName ?? req.body?.fileKey ?? req.query?.fileKey;
+    const providedFileKey = req.body?.fileKey ?? req.query?.fileKey;
+    const uploadId = req.body?.uploadId ?? req.params?.uploadId ?? req.query?.uploadId;
     const userId = req.user?.id;
 
-    if (!fileName && !fileKey) {
+    if (!fileName && !providedFileKey) {
       return res.status(400).json({ message: 'fileName or fileKey is required' });
     }
 
@@ -136,7 +140,7 @@ export async function cancelMultipartUpload(req, res, next) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const scopedKey = buildUserScopedKey(userId, fileKey ?? fileName);
+    const scopedKey = buildUserScopedKey(userId, providedFileKey ?? fileName);
 
     await abortMultipartUpload({ fileName: scopedKey, uploadId });
     return res.status(204).end();
@@ -168,6 +172,41 @@ export async function listIncompleteUploads(req, res, next) {
 
     return res.json({
       uploads
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function listCompletedUploads(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    const limitParam = req.query.limit;
+    const continuationToken = req.query.continuationToken;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (limitParam !== undefined) {
+      const parsed = Number.parseInt(limitParam, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        return res.status(400).json({ message: 'limit must be a positive integer' });
+      }
+    }
+
+    const { objects, isTruncated, nextContinuationToken } = await listCompletedUploadsService({
+      userId,
+      maxKeys: limitParam,
+      continuationToken
+    });
+
+    return res.json({
+      uploads: objects,
+      pagination: {
+        isTruncated,
+        nextContinuationToken
+      }
     });
   } catch (error) {
     return next(error);

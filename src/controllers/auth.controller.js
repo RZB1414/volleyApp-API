@@ -1,12 +1,6 @@
 import validator from 'validator';
 
-import {
-  USER_ROLES,
-  createUser,
-  findUserByEmail,
-  findUserById,
-  sanitizeUser
-} from '../models/user.model.js';
+import { createUser, findUserByEmail, findUserById, sanitizeUser } from '../models/user.model.js';
 import { generateTokens, hashPassword, verifyPassword } from '../services/auth.service.js';
 import {
   isIpBlocked,
@@ -25,8 +19,9 @@ function normalizeName(name) {
   return name?.trim();
 }
 
-function validateRole(role) {
-  return USER_ROLES.includes(role);
+function normalizeOptionalText(value) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
 function setRefreshCookie(res, refreshToken) {
@@ -39,7 +34,7 @@ function setRefreshCookie(res, refreshToken) {
   });
 }
 
-function buildValidationErrors({ name, email, password, role, age }) {
+function buildValidationErrors({ name, email, password, age, yearsAsAProfessional }) {
   const errors = [];
 
   if (!name || !name.trim()) {
@@ -54,14 +49,20 @@ function buildValidationErrors({ name, email, password, role, age }) {
     errors.push({ field: 'password', message: 'Password must be at least 9 characters' });
   }
 
-  if (!role || !validateRole(role)) {
-    errors.push({ field: 'role', message: 'Role is required and must be valid' });
-  }
-
   if (age !== undefined && age !== null) {
     const numericAge = Number(age);
     if (Number.isNaN(numericAge) || numericAge < 10 || numericAge > 100) {
       errors.push({ field: 'age', message: 'Age must be between 10 and 100' });
+    }
+  }
+
+  if (yearsAsAProfessional !== undefined && yearsAsAProfessional !== null) {
+    const numericYears = Number(yearsAsAProfessional);
+    if (Number.isNaN(numericYears) || numericYears < 0 || numericYears > 80) {
+      errors.push({
+        field: 'yearsAsAProfessional',
+        message: 'Years as a professional must be between 0 and 80'
+      });
     }
   }
 
@@ -72,10 +73,13 @@ export async function register(req, res) {
   const name = normalizeName(req.body.name);
   const email = normalizeEmail(req.body.email);
   const password = req.body.password;
-  const role = req.body.role;
   const age = req.body.age === undefined ? undefined : Number(req.body.age);
+  const actualTeam = normalizeOptionalText(req.body.actualTeam);
+  const country = normalizeOptionalText(req.body.country);
+  const yearsAsAProfessional =
+    req.body.yearsAsAProfessional === undefined ? undefined : Number(req.body.yearsAsAProfessional);
 
-  const errors = buildValidationErrors({ name, email, password, role, age });
+  const errors = buildValidationErrors({ name, email, password, age, yearsAsAProfessional });
 
   if (errors.length > 0) {
     return res.status(400).json({ message: 'Validation failed', errors });
@@ -87,7 +91,15 @@ export async function register(req, res) {
   }
 
   const passwordHash = await hashPassword(password);
-  const newUser = await createUser({ name, email, age, role, passwordHash });
+  const newUser = await createUser({
+    name,
+    email,
+    age,
+    passwordHash,
+    actualTeam,
+    country,
+    yearsAsAProfessional
+  });
   const { accessToken, refreshToken } = generateTokens(newUser);
 
   setRefreshCookie(res, refreshToken);
