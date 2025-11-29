@@ -43,6 +43,9 @@ copy .env.example .env
 - `GET /upload/multipart/completed`: lists fully uploaded objects for the authenticated user, with optional pagination via `limit` and `continuationToken`
 - `POST /download/generate`: creates a reusable (until expiry) download token stored in MongoDB (accepts optional `uploadedAt` timestamp from the frontend)
 - `GET /download/use/:token`: uses a token to fetch a fresh presigned URL and redirects to it while the token remains valid
+- `POST /stats/match-report`: validates and persists structured match statistics generated from PDFs and returns a server-side `matchId`
+- `GET /stats/match-report`: lists stored match reports (newest first, optional `?limit=`)
+- `GET /stats/match-report/:matchId`: retrieves the stored report data by `matchId`
 
 ### Multipart upload request body
 
@@ -68,6 +71,62 @@ Use `GET /upload/multipart/completed` to enumerate finished objects (`{ key, siz
 The response includes the generated token URL, TTL, and the normalized `uploadedAt` value returned in ISO format so the client can render consistent metadata without recomputing it.
 
 Download tokens are no longer single-use. Generating a link stores the file reference, expiry timestamp, and the supplied `uploadedAt` metadata; every call to `GET /download/use/:token` verifies the token is still valid and then issues a brand-new presigned URL. Once the configured TTL elapses the token expires automatically (HTTP 410), keeping access scoped without forcing users to request a new link for each download attempt.
+
+### Match report request body
+
+`POST /stats/match-report` expects the JSON payload emitted by `PdfReader.js`:
+
+- `generatedAt` (ISO string, required)
+- `setColumns` (positive integer, required)
+- `columnLabels` (array of column headers, must include at least `setColumns` entries)
+- `matchDate` (string `YYYY-MM-DD`, optional)
+- `matchTime` (`HH:mm`, optional)
+- `teams` (array with at least one team)
+	- `team` (string)
+	- `players` (non-empty array)
+		- `number` (integer jersey number)
+		- `name` (string)
+		- `stats` (record of column label → string/number values)
+
+The API validates the payload with Zod. Validation errors return **400** with the structured issues, successful saves reply with **201** and `{ "matchId": "<uuid>" }`, and unexpected failures bubble up as **500**.
+
+Listing reports:
+
+```bash
+curl http://localhost:3000/stats/match-report?limit=20
+```
+
+Retrieving a report:
+
+```bash
+curl http://localhost:3000/stats/match-report/<match-id>
+```
+
+Example request:
+
+```bash
+curl -X POST http://localhost:3000/stats/match-report \
+	-H "Content-Type: application/json" \
+	-d '{
+		"generatedAt": "2025-11-29T12:34:56.000Z",
+		"setColumns": 5,
+		"columnLabels": ["1","2","3","4","5","Vote","Tot"],
+		"matchDate": "2025-11-12",
+		"matchTime": "19:30",
+		"teams": [
+			{
+				"team": "Time A",
+				"players": [
+					{
+						"number": 10,
+						"name": "Fulano",
+						"stats": {"1": "6", "2": "5", "BK Pts": "."}
+					}
+				]
+			}
+		]
+	}'
+```
 
 ## Development
 

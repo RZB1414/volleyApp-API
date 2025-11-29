@@ -4,6 +4,7 @@ let client;
 let database;
 let downloadTokensCollection;
 let usersCollection;
+let matchReportsCollection;
 
 export async function connectMongo() {
   if (database) {
@@ -29,11 +30,13 @@ export async function connectMongo() {
   database = client.db(dbName);
   downloadTokensCollection = database.collection('downloadTokens');
   usersCollection = database.collection('users');
+  matchReportsCollection = database.collection('matchReports');
 
   await Promise.all([
     downloadTokensCollection.createIndex({ token: 1 }, { unique: true }),
     downloadTokensCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-    usersCollection.createIndex({ email: 1 }, { unique: true })
+    usersCollection.createIndex({ email: 1 }, { unique: true }),
+    matchReportsCollection.createIndex({ matchId: 1 }, { unique: true })
   ]);
 
   console.log('MONGO CONNECTED');
@@ -57,6 +60,14 @@ export function getUsersCollection() {
   return usersCollection;
 }
 
+export function getMatchReportsCollection() {
+  if (!matchReportsCollection) {
+    throw new Error('Database connection has not been initialised');
+  }
+
+  return matchReportsCollection;
+}
+
 export async function disconnectMongo() {
   if (client) {
     await client.close();
@@ -64,5 +75,6 @@ export async function disconnectMongo() {
     database = undefined;
     downloadTokensCollection = undefined;
     usersCollection = undefined;
+    matchReportsCollection = undefined;
   }
 }

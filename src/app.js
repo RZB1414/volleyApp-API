@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { checkHealth } from './controllers/health.controller.js';
 import authRouter from './routes/auth.routes.js';
 import downloadRouter from './routes/download.routes.js';
+import statsRouter from './routes/stats.routes.js';
 import uploadRouter from './routes/upload.routes.js';
 
 const app = express();
@@ -43,6 +44,7 @@ app.get('/health', checkHealth);
 app.use('/auth', authRouter);
 app.use('/upload', uploadRouter);
 app.use('/download', downloadRouter);
+app.use('/stats', statsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Not Found' });
