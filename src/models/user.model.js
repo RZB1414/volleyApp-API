@@ -2,6 +2,20 @@ import { ObjectId } from 'mongodb';
 
 import { getUsersCollection } from '../db/mongo.js';
 
+function mapTeamHistoryEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  return {
+    teamName: entry.teamName ?? null,
+    teamCountry: entry.teamCountry ?? null,
+    seasonStart: entry.seasonStart ?? null,
+    seasonEnd: entry.seasonEnd ?? null,
+    playerNumber: entry.playerNumber ?? null
+  };
+}
+
 function mapUser(userDoc) {
   if (!userDoc) {
     return null;
@@ -15,10 +29,14 @@ function mapUser(userDoc) {
     email: userDoc.email,
     age: userDoc.age,
     yearsAsAProfessional: userDoc.yearsAsAProfessional ?? null,
-    actualTeam: userDoc.actualTeam ?? null,
+    currentTeam: userDoc.currentTeam ?? null,
+    currentTeamCountry: userDoc.currentTeamCountry ?? null,
     country: userDoc.country ?? null,
-    createdAt: userDoc.createdAt,
-    updatedAt: userDoc.updatedAt
+    playerNumber: userDoc.playerNumber ?? null,
+    teamHistory: Array.isArray(userDoc.teamHistory)
+      ? userDoc.teamHistory.map(mapTeamHistoryEntry).filter(Boolean)
+      : [],
+    createdAt: userDoc.createdAt
   };
 }
 
@@ -27,9 +45,12 @@ export async function createUser({
   email,
   age,
   passwordHash,
-  actualTeam,
   country,
-  yearsAsAProfessional
+  yearsAsAProfessional,
+  currentTeam,
+  currentTeamCountry,
+  playerNumber,
+  teamHistory
 }) {
   const users = getUsersCollection();
   const now = new Date();
@@ -38,8 +59,11 @@ export async function createUser({
     email,
     age,
     passwordHash,
-    actualTeam: actualTeam ?? null,
+    currentTeam: currentTeam ?? null,
+    currentTeamCountry: currentTeamCountry ?? null,
     country: country ?? null,
+    playerNumber: playerNumber ?? null,
+    teamHistory: Array.isArray(teamHistory) ? teamHistory : [],
     yearsAsAProfessional: yearsAsAProfessional ?? null,
     createdAt: now,
     updatedAt: now
@@ -59,6 +83,18 @@ export async function findUserById(id) {
   const users = getUsersCollection();
   const user = await users.findOne({ _id: new ObjectId(id) });
   return mapUser(user);
+}
+
+export async function updateUserProfile(id, updates) {
+  const users = getUsersCollection();
+  const timestampedUpdates = { ...updates, updatedAt: new Date() };
+  const result = await users.findOneAndUpdate(
+    { _id: new ObjectId(id) },
+    { $set: timestampedUpdates },
+    { returnDocument: 'after' }
+  );
+
+  return mapUser(result.value);
 }
 
 export function sanitizeUser(userDoc) {

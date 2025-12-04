@@ -1,12 +1,19 @@
 import validator from 'validator';
 
-import { createUser, findUserByEmail, findUserById, sanitizeUser } from '../models/user.model.js';
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  sanitizeUser,
+  updateUserProfile
+} from '../models/user.model.js';
 import { generateTokens, hashPassword, verifyPassword } from '../services/auth.service.js';
 import {
   isIpBlocked,
   registerFailure,
   registerSuccess
 } from '../services/loginAttempts.service.js';
+import { normalizePlayerNumber } from '../utils/playerNumber.js';
 
 const MAX_REFRESH_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const GENERIC_AUTH_MESSAGE = 'Invalid email or password';
@@ -36,6 +43,7 @@ function setRefreshCookie(res, refreshToken) {
 
 function buildValidationErrors({ name, email, password, age, yearsAsAProfessional }) {
   const errors = [];
+  const currentYear = new Date().getFullYear();
 
   if (!name || !name.trim()) {
     errors.push({ field: 'name', message: 'Name is required' });
@@ -58,10 +66,14 @@ function buildValidationErrors({ name, email, password, age, yearsAsAProfessiona
 
   if (yearsAsAProfessional !== undefined && yearsAsAProfessional !== null) {
     const numericYears = Number(yearsAsAProfessional);
-    if (Number.isNaN(numericYears) || numericYears < 0 || numericYears > 80) {
+    if (
+      Number.isNaN(numericYears) ||
+      numericYears < 1950 ||
+      numericYears > currentYear
+    ) {
       errors.push({
         field: 'yearsAsAProfessional',
-        message: 'Years as a professional must be between 0 and 80'
+        message: `Starting year must be between 1950 and ${currentYear}`
       });
     }
   }
@@ -74,12 +86,24 @@ export async function register(req, res) {
   const email = normalizeEmail(req.body.email);
   const password = req.body.password;
   const age = req.body.age === undefined ? undefined : Number(req.body.age);
-  const actualTeam = normalizeOptionalText(req.body.actualTeam);
   const country = normalizeOptionalText(req.body.country);
+  const currentTeam = normalizeOptionalText(req.body.currentTeam);
+  const currentTeamCountry = normalizeOptionalText(req.body.currentTeamCountry);
   const yearsAsAProfessional =
     req.body.yearsAsAProfessional === undefined ? undefined : Number(req.body.yearsAsAProfessional);
+  const { history: teamHistory, errors: teamHistoryErrors } = validateTeamHistory(
+    req.body.teamHistory
+  );
 
   const errors = buildValidationErrors({ name, email, password, age, yearsAsAProfessional });
+  errors.push(...teamHistoryErrors);
+
+  let playerNumber;
+  try {
+    playerNumber = normalizePlayerNumber(req.body.playerNumber);
+  } catch (error) {
+    errors.push({ field: 'playerNumber', message: error.message });
+  }
 
   if (errors.length > 0) {
     return res.status(400).json({ message: 'Validation failed', errors });
@@ -96,9 +120,12 @@ export async function register(req, res) {
     email,
     age,
     passwordHash,
-    actualTeam,
     country,
-    yearsAsAProfessional
+    yearsAsAProfessional,
+    currentTeam,
+    currentTeamCountry,
+    playerNumber,
+    teamHistory: teamHistory ?? []
   });
   const { accessToken, refreshToken } = generateTokens(newUser);
 
@@ -148,12 +175,258 @@ export async function login(req, res) {
   return res.json({ user: safeUser, accessToken });
 }
 
+function resolveRequestUserId(req) {
+  return req?.user?.id ?? req?.user?._id ?? req?.user?.userId ?? null;
+}
+
 export async function getCurrentUser(req, res) {
-  const user = await findUserById(req.user.id);
+  const userId = resolveRequestUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const user = await findUserById(userId);
 
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
 
   return res.json({ user });
+}
+
+function normalizeYears(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || `${value}`.trim().length === 0) {
+    return null;
+  }
+
+  const numericYear = Number(value);
+  const currentYear = new Date().getFullYear();
+  if (Number.isNaN(numericYear) || numericYear < 1950 || numericYear > currentYear) {
+    return Number.NaN;
+  }
+
+  return numericYear;
+}
+
+function normalizeField(value) {
+  return normalizeOptionalText(value) ?? null;
+}
+
+function parseHistoryDate(rawValue) {
+  if (rawValue === undefined || rawValue === null) {
+    return { ok: false, code: 'required' };
+  }
+
+  if (typeof rawValue === 'string') {
+    const trimmed = rawValue.trim();
+    if (trimmed.length === 0) {
+      return { ok: false, code: 'required' };
+    }
+    rawValue = trimmed;
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return { ok: false, code: 'invalid' };
+  }
+
+  return { ok: true, value: parsed };
+}
+
+function validateTeamHistory(rawHistory) {
+  if (rawHistory === undefined) {
+    return { history: undefined, errors: [] };
+  }
+
+  if (rawHistory === null) {
+    return { history: [], errors: [] };
+  }
+
+  if (!Array.isArray(rawHistory)) {
+    return {
+      history: undefined,
+      errors: [{ field: 'teamHistory', message: 'teamHistory must be an array of objects' }]
+    };
+  }
+
+  const errors = [];
+  const history = [];
+
+  rawHistory.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      errors.push({
+        field: `teamHistory[${index}]`,
+        message: 'Each entry must be an object'
+      });
+      return;
+    }
+
+    const normalizedEntry = {};
+    let hasErrors = false;
+
+    const teamName = normalizeOptionalText(entry.teamName);
+    if (!teamName) {
+      errors.push({
+        field: `teamHistory[${index}].teamName`,
+        message: 'teamName is required'
+      });
+      hasErrors = true;
+    } else {
+      normalizedEntry.teamName = teamName;
+    }
+
+    const teamCountry = normalizeOptionalText(entry.teamCountry ?? entry.country);
+    if (!teamCountry) {
+      errors.push({
+        field: `teamHistory[${index}].teamCountry`,
+        message: 'teamCountry is required'
+      });
+      hasErrors = true;
+    } else {
+      normalizedEntry.teamCountry = teamCountry;
+    }
+
+    const seasonStartResult = parseHistoryDate(entry.seasonStart ?? entry.startDate);
+    if (!seasonStartResult.ok) {
+      errors.push({
+        field: `teamHistory[${index}].seasonStart`,
+        message:
+          seasonStartResult.code === 'required'
+            ? 'seasonStart is required'
+            : 'seasonStart must be a valid date'
+      });
+      hasErrors = true;
+    } else {
+      normalizedEntry.seasonStart = seasonStartResult.value;
+    }
+
+    const seasonEndResult = parseHistoryDate(entry.seasonEnd ?? entry.endDate);
+    if (!seasonEndResult.ok) {
+      errors.push({
+        field: `teamHistory[${index}].seasonEnd`,
+        message:
+          seasonEndResult.code === 'required'
+            ? 'seasonEnd is required'
+            : 'seasonEnd must be a valid date'
+      });
+      hasErrors = true;
+    } else {
+      normalizedEntry.seasonEnd = seasonEndResult.value;
+    }
+
+    let historicalNumber;
+    try {
+      historicalNumber = normalizePlayerNumber(entry.playerNumber ?? entry.jerseyNumber);
+    } catch (error) {
+      errors.push({
+        field: `teamHistory[${index}].playerNumber`,
+        message: error.message
+      });
+      hasErrors = true;
+    }
+
+    if (!hasErrors) {
+      if (historicalNumber === undefined || historicalNumber === null) {
+        errors.push({
+          field: `teamHistory[${index}].playerNumber`,
+          message: 'playerNumber is required'
+        });
+        hasErrors = true;
+      } else {
+        normalizedEntry.playerNumber = historicalNumber;
+      }
+    }
+
+    if (!hasErrors && normalizedEntry.seasonEnd < normalizedEntry.seasonStart) {
+      errors.push({
+        field: `teamHistory[${index}].seasonEnd`,
+        message: 'seasonEnd must be after seasonStart'
+      });
+      hasErrors = true;
+    }
+
+    if (!hasErrors) {
+      history.push(normalizedEntry);
+    }
+  });
+
+  return { history, errors };
+}
+
+export async function updateProfile(req, res) {
+  const updates = {};
+  const errors = [];
+  const { body } = req;
+  const userId = resolveRequestUserId(req);
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  if ('currentTeam' in body) {
+    updates.currentTeam = normalizeField(body.currentTeam);
+  }
+
+  if ('country' in body) {
+    updates.country = normalizeField(body.country);
+  }
+
+  if ('currentTeamCountry' in body) {
+    updates.currentTeamCountry = normalizeField(body.currentTeamCountry);
+  }
+
+  if ('teamHistory' in body) {
+    const { history, errors: teamHistoryErrors } = validateTeamHistory(body.teamHistory);
+    if (teamHistoryErrors.length > 0) {
+      errors.push(...teamHistoryErrors);
+    } else if (history !== undefined) {
+      updates.teamHistory = history;
+    }
+  }
+
+  if ('yearsAsAProfessional' in body) {
+    const normalizedYears = normalizeYears(body.yearsAsAProfessional);
+    if (Number.isNaN(normalizedYears)) {
+      errors.push({
+        field: 'yearsAsAProfessional',
+        message: `Starting year must be between 1950 and ${new Date().getFullYear()}`
+      });
+    } else {
+      updates.yearsAsAProfessional = normalizedYears ?? null;
+    }
+  }
+
+  if ('playerNumber' in body) {
+    try {
+      const normalizedPlayerNumber = normalizePlayerNumber(body.playerNumber);
+      if (normalizedPlayerNumber !== undefined) {
+        updates.playerNumber = normalizedPlayerNumber ?? null;
+      }
+    } catch (error) {
+      errors.push({ field: 'playerNumber', message: error.message });
+    }
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ message: 'Validation failed', errors });
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ message: 'No fields to update' });
+  }
+
+  let updatedUser = await updateUserProfile(userId, updates);
+
+  if (!updatedUser) {
+    updatedUser = await findUserById(userId);
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+  }
+
+  return res.json({ user: updatedUser });
 }

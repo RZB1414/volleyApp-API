@@ -32,9 +32,10 @@ copy .env.example .env
 ## Endpoints
 
 - `GET /health`: returns basic API health information
-- `POST /auth/register`: creates a user (requires `name`, `email`, `password`, optional `age` 10-100, plus optional metadata like `actualTeam`, `country`, `yearsAsAProfessional`)
+- `POST /auth/register`: creates a user (requires `name`, `email`, `password`, optional `age` 10-100, plus optional metadata like `country`, `currentTeam`, `currentTeamCountry`, `yearsAsAProfessional`, `playerNumber`, and a `teamHistory` array)
 - `POST /auth/login`: returns a demo token for the provided `userId`
 - `GET /auth/me`: returns the authenticated user extracted from headers
+- `PATCH /auth/me`: updates profile metadata (`currentTeam`, `currentTeamCountry`, `country`, `yearsAsAProfessional`, `playerNumber`, `teamHistory`)
 - `POST /upload/multipart`: generates presigned URLs for multipart uploads (requires `x-user-id` header)
 - `POST /upload/multipart/complete`: finalises multipart uploads with part metadata
 - `POST /upload/multipart/cancel`: aborts multipart uploads
@@ -46,6 +47,17 @@ copy .env.example .env
 - `POST /stats/match-report`: validates and persists structured match statistics generated from PDFs and returns a server-side `matchId`
 - `GET /stats/match-report`: lists stored match reports (newest first, optional `?limit=`)
 - `GET /stats/match-report/:matchId`: retrieves the stored report data by `matchId`
+
+### Team history payload
+
+`teamHistory` is always an array. Each entry requires:
+
+- `teamName` (string)
+- `teamCountry` (string)
+- `seasonStart` and `seasonEnd` (date strings, `seasonEnd` must come after `seasonStart`)
+- `playerNumber` (digits up to three characters, same validation as the main `playerNumber` field)
+
+Use `PATCH /auth/me` to replace the entire history — send the full array you want persisted or `null`/`[]` to clear it.
 
 ### Multipart upload request body
 
