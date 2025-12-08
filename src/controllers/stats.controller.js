@@ -3,7 +3,8 @@ import { z } from 'zod';
 import {
   findMatchReportByMatchId,
   insertMatchReport,
-  listMatchReports
+  listMatchReports,
+  DuplicateMatchReportError
 } from '../models/matchReport.model.js';
 
 const statsRecordSchema = z.record(z.string().min(1), z.union([z.string(), z.number()]));
@@ -46,16 +47,30 @@ const matchIdParamSchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).optional()
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  ownerId: z.string().trim().min(1, 'ownerId must be a non-empty string').optional()
 });
 
 export async function createMatchReport(req, res, next) {
   try {
     const payload = matchReportSchema.parse(req.body);
-    const record = await insertMatchReport(payload);
+    const ownerId = req.user?.id;
 
-    return res.status(201).json({ matchId: record.matchId });
+    if (!ownerId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const record = await insertMatchReport(payload, { ownerId });
+
+    return res.status(201).json({ matchId: record.matchId, ownerId: record.ownerId });
   } catch (error) {
+    if (error instanceof DuplicateMatchReportError) {
+      return res.status(409).json({
+        message: 'A match report already exists for this date and team combination',
+        matchId: error.matchId
+      });
+    }
+
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         message: 'Invalid payload',
@@ -91,8 +106,8 @@ export async function getMatchReport(req, res, next) {
 
 export async function listMatchReportsController(req, res, next) {
   try {
-    const { limit } = listQuerySchema.parse(req.query);
-    const reports = await listMatchReports({ limit: limit ?? 50 });
+    const { limit, ownerId } = listQuerySchema.parse(req.query);
+    const reports = await listMatchReports({ limit: limit ?? 50, ownerId });
 
     return res.json({ items: reports });
   } catch (error) {

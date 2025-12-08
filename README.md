@@ -1,6 +1,6 @@
 # Volley Plus API
 
-Node.js REST API built with Express for handling authenticated uploads to Cloudflare R2 and expiring download links managed via MongoDB.
+Node.js REST API built with Express for handling authenticated uploads to Cloudflare R2 and persisting auth, tokens, and match reports directly inside a dedicated R2 bucket.
 
 ## Requirements
 
@@ -18,6 +18,15 @@ Copy `.env.example` to `.env` and adjust environment variables when needed.
 ```bash
 copy .env.example .env
 ```
+
+### Cloudflare R2 configuration
+
+Set different credentials for the media bucket (`R2_BUCKET_NAME`) and for the structured data bucket (`R2_DATA_BUCKET_NAME`). Both buckets must live inside the same Cloudflare account (`CLOUDFLARE_ACCOUNT_ID`), but creating an extra API token for the data bucket keeps auth records isolated from the presigned-upload credentials.
+
+Required keys:
+
+- `R2_BUCKET_NAME`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` — used for presigned uploads/downloads of media files.
+- `R2_DATA_BUCKET_NAME`, `R2_DATA_ACCESS_KEY`, `R2_DATA_SECRET_KEY` — used for persisting users, download tokens, and match reports as JSON documents.
 
 ## Scripts
 
@@ -42,10 +51,10 @@ copy .env.example .env
 - `DELETE /upload/multipart/pending/:uploadId`: alternative shortcut for aborting a pending upload by `uploadId` (provide `fileKey` or `fileName` via query string)
 - `GET /upload/multipart/pending`: lists current multipart uploads that have not been completed yet (filtered by `x-user-id`)
 - `GET /upload/multipart/completed`: lists fully uploaded objects for the authenticated user, with optional pagination via `limit` and `continuationToken`
-- `POST /download/generate`: creates a reusable (until expiry) download token stored in MongoDB (accepts optional `uploadedAt` timestamp from the frontend)
+- `POST /download/generate`: creates a reusable (until expiry) download token stored in the R2 data bucket (accepts optional `uploadedAt` timestamp from the frontend)
 - `GET /download/use/:token`: uses a token to fetch a fresh presigned URL and redirects to it while the token remains valid
-- `POST /stats/match-report`: validates and persists structured match statistics generated from PDFs and returns a server-side `matchId`
-- `GET /stats/match-report`: lists stored match reports (newest first, optional `?limit=`)
+- `POST /stats/match-report`: validates and persists structured match statistics generated from PDFs and returns a server-side `matchId`. Requires the `x-user-id` header, stores that value as `ownerId`, and rejects duplicates (same `matchDate` + same team names) with **409**.
+- `GET /stats/match-report`: lists stored match reports (newest first). Supports optional `?limit=` and `?ownerId=<userId>` filtering. Every item includes its `ownerId` so the frontend can further filter locally if needed.
 - `GET /stats/match-report/:matchId`: retrieves the stored report data by `matchId`
 
 ### Team history payload
@@ -67,7 +76,7 @@ Use `PATCH /auth/me` to replace the entire history — send the full array you w
 - `contentType` (string, optional but recommended)
 - `fileSizeBytes` (number, optional) — when provided, the API automatically sets **one part per 100 MB** (e.g., 450 MB → 5 parts). If `fileSizeBytes` is omitted you can still pass `parts`; otherwise it defaults to a single part.
 
-The response echoes `partCount`, `chunkSizeBytes`, and a `fileKey` that includes the authenticated `userId` as a prefix (`<userId>/<originalName>`). Use that `fileKey` for `/upload/multipart/complete`, `/upload/multipart/cancel`, and when generating download tokens so each object stays namespaced per user. The object metadata also stores the `userId` for traceability.
+The response echoes `partCount`, `chunkSizeBytes`, and a `fileKey` that includes the authenticated `userId` as a prefix (`<userId>/<originalName>`). Use that `fileKey` for `/upload/multipart/complete`, `/upload/multipart/cancel`, and when generating download tokens so each object stays namespaced per user. The object metadata also stores the `userId` for traceability. When the original name ends with `.pdf`, the API checks for an existing object with the same user-scoped key and returns **409** if the PDF was already uploaded by that user.
 
 Call `GET /upload/multipart/pending` (with the same auth headers) to inspect any multipart uploads that are still open for that user. Optional query `?limit=25` adjusts how many records the API asks from Cloudflare R2 (defaults to 50) and returns an array of `{ key, uploadId, initiatedAt }`. To remove one of those entries from the UI, hit `DELETE /upload/multipart/pending/<uploadId>?fileKey=<key>`, which internally reuses the same cancellation logic as the POST endpoint but is easier to wire from the frontend list view.
 
@@ -86,7 +95,7 @@ Download tokens are no longer single-use. Generating a link stores the file refe
 
 ### Match report request body
 
-`POST /stats/match-report` expects the JSON payload emitted by `PdfReader.js`:
+`POST /stats/match-report` expects the JSON payload emitted by `PdfReader.js`. The API rejects duplicates whenever both the `matchDate` and the set of team names (case-insensitive) match a previously stored report. The authenticated user becomes the `ownerId` of the created match report, and every response that returns report data includes this field so clients can filter by user:
 
 - `generatedAt` (ISO string, required)
 - `setColumns` (positive integer, required)
@@ -101,6 +110,8 @@ Download tokens are no longer single-use. Generating a link stores the file refe
 		- `stats` (record of column label → string/number values)
 
 The API validates the payload with Zod. Validation errors return **400** with the structured issues, successful saves reply with **201** and `{ "matchId": "<uuid>" }`, and unexpected failures bubble up as **500**.
+
+Provide `?ownerId=<user-id>` when listing reports to have the API filter before returning results. Otherwise fetch the latest records and filter client-side via the `ownerId` attribute.
 
 Listing reports:
 
@@ -146,7 +157,7 @@ curl -X POST http://localhost:3000/stats/match-report \
 npm run dev
 ```
 
-The server loads variables from `.env` (if present), initialises MongoDB (with TTL index on download tokens), and listens on the port configured through `PORT` (default 3000).
+The server loads variables from `.env` (if present), initialises the R2 clients, and listens on the port configured through `PORT` (default 3000).
 
 ### Authentication headers
 

@@ -5,10 +5,11 @@ import {
   getMatchReport,
   listMatchReportsController
 } from '../controllers/stats.controller.js';
+import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-router.post('/match-report', createMatchReport);
+router.post('/match-report', authenticate, createMatchReport);
 router.get('/match-report', listMatchReportsController);
 router.get('/match-report/:matchId', getMatchReport);
 

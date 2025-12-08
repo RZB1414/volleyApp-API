@@ -66,11 +66,7 @@ function buildValidationErrors({ name, email, password, age, yearsAsAProfessiona
 
   if (yearsAsAProfessional !== undefined && yearsAsAProfessional !== null) {
     const numericYears = Number(yearsAsAProfessional);
-    if (
-      Number.isNaN(numericYears) ||
-      numericYears < 1950 ||
-      numericYears > currentYear
-    ) {
+    if (Number.isNaN(numericYears) || numericYears < 1950 || numericYears > currentYear) {
       errors.push({
         field: 'yearsAsAProfessional',
         message: `Starting year must be between 1950 and ${currentYear}`

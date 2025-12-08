@@ -2,6 +2,7 @@ import {
   abortMultipartUpload,
   completeMultipartUpload,
   createMultipartUploadUrls,
+  objectExists,
   listCompletedUploads as listCompletedUploadsService,
   listIncompleteMultipartUploads
 } from '../services/presigned.service.js';
@@ -57,7 +58,18 @@ export async function createMultipartUpload(req, res, next) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const fileKey = buildUserScopedKey(userId, fileName);
+    const normalizedFileName = `${fileName}`.trim();
+    const fileKey = buildUserScopedKey(userId, normalizedFileName);
+    const isPdfUpload = normalizedFileName.toLowerCase().endsWith('.pdf');
+
+    if (isPdfUpload) {
+      const alreadyUploaded = await objectExists(fileKey);
+      if (alreadyUploaded) {
+        return res
+          .status(409)
+          .json({ message: 'This PDF has already been uploaded for this user' });
+      }
+    }
 
     const result = await createMultipartUploadUrls({
       fileName: fileKey,

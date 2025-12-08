@@ -3,6 +3,7 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListMultipartUploadsCommand,
   ListObjectsV2Command,
   UploadPartCommand
@@ -21,6 +22,33 @@ const MULTIPART_EXPIRATION_SECONDS = Number.parseInt(
 );
 
 const bucketName = process.env.R2_BUCKET_NAME ?? 'videos';
+
+function isNotFound(error) {
+  if (!error) {
+    return false;
+  }
+
+  const statusCode = error.$metadata?.httpStatusCode;
+  return error.name === 'NoSuchKey' || error.name === 'NotFound' || statusCode === 404;
+}
+
+export async function objectExists(key) {
+  if (!key) {
+    return false;
+  }
+
+  try {
+    const command = new HeadObjectCommand({ Bucket: bucketName, Key: key });
+    await r2.send(command);
+    return true;
+  } catch (error) {
+    if (isNotFound(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
 
 export async function createPresignedDownload(
   fileName,

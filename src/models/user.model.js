@@ -1,6 +1,41 @@
-import { ObjectId } from 'mongodb';
+import { randomUUID } from 'node:crypto';
 
-import { getUsersCollection } from '../db/mongo.js';
+import { deleteObject, getJsonObject, putJsonObject } from '../services/jsonStore.service.js';
+
+const USERS_DATA_PREFIX = 'users/data';
+const USERS_EMAIL_INDEX_PREFIX = 'users/by-email';
+
+function buildUserDataKey(userId) {
+  return `${USERS_DATA_PREFIX}/${userId}.json`;
+}
+
+function buildEmailIndexKey(email) {
+  const normalized = Buffer.from(email).toString('base64url');
+  return `${USERS_EMAIL_INDEX_PREFIX}/${normalized}.json`;
+}
+
+function parseStoredDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function serializeTeamHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history.map((entry) => ({
+    teamName: entry.teamName ?? null,
+    teamCountry: entry.teamCountry ?? null,
+    seasonStart: entry.seasonStart ? new Date(entry.seasonStart).toISOString() : null,
+    seasonEnd: entry.seasonEnd ? new Date(entry.seasonEnd).toISOString() : null,
+    playerNumber: entry.playerNumber ?? null
+  }));
+}
 
 function mapTeamHistoryEntry(entry) {
   if (!entry || typeof entry !== 'object') {
@@ -10,8 +45,8 @@ function mapTeamHistoryEntry(entry) {
   return {
     teamName: entry.teamName ?? null,
     teamCountry: entry.teamCountry ?? null,
-    seasonStart: entry.seasonStart ?? null,
-    seasonEnd: entry.seasonEnd ?? null,
+    seasonStart: parseStoredDate(entry.seasonStart),
+    seasonEnd: parseStoredDate(entry.seasonEnd),
     playerNumber: entry.playerNumber ?? null
   };
 }
@@ -36,8 +71,13 @@ function mapUser(userDoc) {
     teamHistory: Array.isArray(userDoc.teamHistory)
       ? userDoc.teamHistory.map(mapTeamHistoryEntry).filter(Boolean)
       : [],
-    createdAt: userDoc.createdAt
+    createdAt: parseStoredDate(userDoc.createdAt)
   };
+}
+
+async function loadUserById(userId) {
+  const key = buildUserDataKey(userId);
+  return getJsonObject(key);
 }
 
 export async function createUser({
@@ -52,9 +92,12 @@ export async function createUser({
   playerNumber,
   teamHistory
 }) {
-  const users = getUsersCollection();
-  const now = new Date();
+  const userId = randomUUID();
+  const userKey = buildUserDataKey(userId);
+  const emailKey = buildEmailIndexKey(email);
+  const now = new Date().toISOString();
   const doc = {
+    id: userId,
     name,
     email,
     age,
@@ -63,38 +106,59 @@ export async function createUser({
     currentTeamCountry: currentTeamCountry ?? null,
     country: country ?? null,
     playerNumber: playerNumber ?? null,
-    teamHistory: Array.isArray(teamHistory) ? teamHistory : [],
+    teamHistory: serializeTeamHistory(teamHistory),
     yearsAsAProfessional: yearsAsAProfessional ?? null,
     createdAt: now,
     updatedAt: now
   };
 
-  const result = await users.insertOne(doc);
-  return mapUser({ ...doc, _id: result.insertedId });
+  await putJsonObject(userKey, doc);
+
+  try {
+    await putJsonObject(emailKey, { userId });
+  } catch (error) {
+    await deleteObject(userKey);
+    throw error;
+  }
+
+  return mapUser(doc);
 }
 
 export async function findUserByEmail(email) {
-  const users = getUsersCollection();
-  const user = await users.findOne({ email });
-  return user;
+  const emailKey = buildEmailIndexKey(email);
+  const entry = await getJsonObject(emailKey);
+  if (!entry?.userId) {
+    return null;
+  }
+
+  return loadUserById(entry.userId);
 }
 
 export async function findUserById(id) {
-  const users = getUsersCollection();
-  const user = await users.findOne({ _id: new ObjectId(id) });
-  return mapUser(user);
+  const doc = await loadUserById(id);
+  return mapUser(doc);
 }
 
 export async function updateUserProfile(id, updates) {
-  const users = getUsersCollection();
-  const timestampedUpdates = { ...updates, updatedAt: new Date() };
-  const result = await users.findOneAndUpdate(
-    { _id: new ObjectId(id) },
-    { $set: timestampedUpdates },
-    { returnDocument: 'after' }
-  );
+  const doc = await loadUserById(id);
+  if (!doc) {
+    return null;
+  }
 
-  return mapUser(result.value);
+  const now = new Date().toISOString();
+  const hasTeamHistoryUpdate = Object.prototype.hasOwnProperty.call(updates, 'teamHistory');
+  const nextTeamHistory = hasTeamHistoryUpdate
+    ? serializeTeamHistory(updates.teamHistory)
+    : doc.teamHistory;
+  const nextDoc = {
+    ...doc,
+    ...updates,
+    teamHistory: nextTeamHistory,
+    updatedAt: now
+  };
+
+  await putJsonObject(buildUserDataKey(id), nextDoc);
+  return mapUser(nextDoc);
 }
 
 export function sanitizeUser(userDoc) {
