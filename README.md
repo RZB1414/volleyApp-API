@@ -1,178 +1,113 @@
-# Volley Plus API
+# Volley Plus API (Workers)
 
-Node.js REST API built with Express for handling authenticated uploads to Cloudflare R2 and persisting auth, tokens, and match reports directly inside a dedicated R2 bucket.
+Volley Plus now runs entirely on [Cloudflare Workers](https://developers.cloudflare.com/workers/) with [Hono](https://hono.dev/). Binary uploads live in the `videos` bucket (bound as `VOLLEY_MEDIA`) while JSON data such as users, tokens, and match reports live in the `volleyplus-storage` bucket (bound as `VOLLEY_DATA`) — no more Express, MongoDB, or AWS SDK.
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 20+ (for local tooling)
 - npm 10+
+- Cloudflare account with Workers + R2 access
+- Wrangler 3.114+ (`npx wrangler --version`)
+
+## Project layout
+
+```
+worker/
+  package.json        # scripts and deps for the Worker
+  wrangler.toml       # bindings + deployment config
+  src/                # Hono app, routes, services and utilities
+```
+
+All legacy Express files (`src/`, `tests/`, root `package.json`, etc.) were removed. The Worker folder is now the only runtime code.
 
 ## Setup
 
 ```bash
+cd worker
 npm install
+# Authenticate once if you have not yet linked Wrangler to your account
+npx wrangler login
+
+# Configure secrets/bindings
+npx wrangler secret put JWT_SECRET
+# Update wrangler.toml with both R2 bucket bindings (VOLLEY_MEDIA + VOLLEY_DATA)
 ```
 
-Copy `.env.example` to `.env` and adjust environment variables when needed.
-
-```bash
-copy .env.example .env
-```
-
-### Cloudflare R2 configuration
-
-Set different credentials for the media bucket (`R2_BUCKET_NAME`) and for the structured data bucket (`R2_DATA_BUCKET_NAME`). Both buckets must live inside the same Cloudflare account (`CLOUDFLARE_ACCOUNT_ID`), but creating an extra API token for the data bucket keeps auth records isolated from the presigned-upload credentials.
-
-Required keys:
-
-- `R2_BUCKET_NAME`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` — used for presigned uploads/downloads of media files.
-- `R2_DATA_BUCKET_NAME`, `R2_DATA_ACCESS_KEY`, `R2_DATA_SECRET_KEY` — used for persisting users, download tokens, and match reports as JSON documents.
-
-## Scripts
-
-- `npm run dev`: starts the development server with automatic reload via nodemon
-- `npm start`: starts the server in production mode
-- `npm run lint`: runs ESLint checks
-- `npm run lint:fix`: fixes lint issues when possible
-- `npm run format`: validates formatting with Prettier
-- `npm run format:fix`: formats the project with Prettier
-- `npm test`: executes the Node.js test runner (no tests yet)
-
-## Endpoints
-
-- `GET /health`: returns basic API health information
-- `POST /auth/register`: creates a user (requires `name`, `email`, `password`, optional `age` 10-100, plus optional metadata like `country`, `currentTeam`, `currentTeamCountry`, `yearsAsAProfessional`, `playerNumber`, and a `teamHistory` array)
-- `POST /auth/login`: returns a demo token for the provided `userId`
-- `GET /auth/me`: returns the authenticated user extracted from headers
-- `PATCH /auth/me`: updates profile metadata (`currentTeam`, `currentTeamCountry`, `country`, `yearsAsAProfessional`, `playerNumber`, `teamHistory`)
-- `POST /upload/multipart`: generates presigned URLs for multipart uploads (requires `x-user-id` header)
-- `POST /upload/multipart/complete`: finalises multipart uploads with part metadata
-- `POST /upload/multipart/cancel`: aborts multipart uploads
-- `DELETE /upload/multipart/pending/:uploadId`: alternative shortcut for aborting a pending upload by `uploadId` (provide `fileKey` or `fileName` via query string)
-- `GET /upload/multipart/pending`: lists current multipart uploads that have not been completed yet (filtered by `x-user-id`)
-- `GET /upload/multipart/completed`: lists fully uploaded objects for the authenticated user, with optional pagination via `limit` and `continuationToken`
-- `POST /download/generate`: creates a reusable (until expiry) download token stored in the R2 data bucket (accepts optional `uploadedAt` timestamp from the frontend)
-- `GET /download/use/:token`: uses a token to fetch a fresh presigned URL and redirects to it while the token remains valid
-- `POST /stats/match-report`: validates and persists structured match statistics generated from PDFs and returns a server-side `matchId`. Requires the `x-user-id` header, stores that value as `ownerId`, and rejects duplicates (same `matchDate` + same team names) with **409**.
-- `GET /stats/match-report`: lists stored match reports (newest first). Supports optional `?limit=` and `?ownerId=<userId>` filtering. Every item includes its `ownerId` so the frontend can further filter locally if needed.
-- `GET /stats/match-report/:matchId`: retrieves the stored report data by `matchId`
-
-### Team history payload
-
-`teamHistory` is always an array. Each entry requires:
-
-- `teamName` (string)
-- `teamCountry` (string)
-- `seasonStart` and `seasonEnd` (date strings, `seasonEnd` must come after `seasonStart`)
-- `playerNumber` (digits up to three characters, same validation as the main `playerNumber` field)
-
-Use `PATCH /auth/me` to replace the entire history — send the full array you want persisted or `null`/`[]` to clear it.
-
-### Multipart upload request body
-
-`POST /upload/multipart` (auth required: `x-user-id` header) accepts:
-
-- `fileName` (string, required)
-- `contentType` (string, optional but recommended)
-- `fileSizeBytes` (number, optional) — when provided, the API automatically sets **one part per 100 MB** (e.g., 450 MB → 5 parts). If `fileSizeBytes` is omitted you can still pass `parts`; otherwise it defaults to a single part.
-
-The response echoes `partCount`, `chunkSizeBytes`, and a `fileKey` that includes the authenticated `userId` as a prefix (`<userId>/<originalName>`). Use that `fileKey` for `/upload/multipart/complete`, `/upload/multipart/cancel`, and when generating download tokens so each object stays namespaced per user. The object metadata also stores the `userId` for traceability. When the original name ends with `.pdf`, the API checks for an existing object with the same user-scoped key and returns **409** if the PDF was already uploaded by that user.
-
-Call `GET /upload/multipart/pending` (with the same auth headers) to inspect any multipart uploads that are still open for that user. Optional query `?limit=25` adjusts how many records the API asks from Cloudflare R2 (defaults to 50) and returns an array of `{ key, uploadId, initiatedAt }`. To remove one of those entries from the UI, hit `DELETE /upload/multipart/pending/<uploadId>?fileKey=<key>`, which internally reuses the same cancellation logic as the POST endpoint but is easier to wire from the frontend list view.
-
-Use `GET /upload/multipart/completed` to enumerate finished objects (`{ key, size, lastModified, etag }`). Provide `?limit=25` and/or `?continuationToken=...` if you need to page through large collections.
-
-### Download token request body
-
-`POST /download/generate` accepts:
-
-- `fileName` (string, required): the R2 key (e.g. `user123/video.mp4`).
-- `uploadedAt` (ISO string, optional): original video creation/upload timestamp coming from the frontend UI. When omitted the API stores the current timestamp.
-
-The response includes the generated token URL, TTL, and the normalized `uploadedAt` value returned in ISO format so the client can render consistent metadata without recomputing it.
-
-Download tokens are no longer single-use. Generating a link stores the file reference, expiry timestamp, and the supplied `uploadedAt` metadata; every call to `GET /download/use/:token` verifies the token is still valid and then issues a brand-new presigned URL. Once the configured TTL elapses the token expires automatically (HTTP 410), keeping access scoped without forcing users to request a new link for each download attempt.
-
-### Match report request body
-
-`POST /stats/match-report` expects the JSON payload emitted by `PdfReader.js`. The API rejects duplicates whenever both the `matchDate` and the set of team names (case-insensitive) match a previously stored report. The authenticated user becomes the `ownerId` of the created match report, and every response that returns report data includes this field so clients can filter by user:
-
-- `generatedAt` (ISO string, required)
-- `setColumns` (positive integer, required)
-- `columnLabels` (array of column headers, must include at least `setColumns` entries)
-- `matchDate` (string `YYYY-MM-DD`, optional)
-- `matchTime` (`HH:mm`, optional)
-- `teams` (array with at least one team)
-	- `team` (string)
-	- `players` (non-empty array)
-		- `number` (integer jersey number)
-		- `name` (string)
-		- `stats` (record of column label → string/number values)
-
-The API validates the payload with Zod. Validation errors return **400** with the structured issues, successful saves reply with **201** and `{ "matchId": "<uuid>" }`, and unexpected failures bubble up as **500**.
-
-Provide `?ownerId=<user-id>` when listing reports to have the API filter before returning results. Otherwise fetch the latest records and filter client-side via the `ownerId` attribute.
-
-Listing reports:
-
-```bash
-curl http://localhost:3000/stats/match-report?limit=20
-```
-
-Retrieving a report:
-
-```bash
-curl http://localhost:3000/stats/match-report/<match-id>
-```
-
-Example request:
-
-```bash
-curl -X POST http://localhost:3000/stats/match-report \
-	-H "Content-Type: application/json" \
-	-d '{
-		"generatedAt": "2025-11-29T12:34:56.000Z",
-		"setColumns": 5,
-		"columnLabels": ["1","2","3","4","5","Vote","Tot"],
-		"matchDate": "2025-11-12",
-		"matchTime": "19:30",
-		"teams": [
-			{
-				"team": "Time A",
-				"players": [
-					{
-						"number": 10,
-						"name": "Fulano",
-						"stats": {"1": "6", "2": "5", "BK Pts": "."}
-					}
-				]
-			}
-		]
-	}'
-```
+`wrangler.toml` already binds `VOLLEY_MEDIA` to `videos` and `VOLLEY_DATA` to `volleyplus-storage`. Edit the `bucket_name` fields if your account uses different names.
 
 ## Development
 
 ```bash
+cd worker
 npm run dev
 ```
 
-The server loads variables from `.env` (if present), initialises the R2 clients, and listens on the port configured through `PORT` (default 3000).
+Wrangler serves the Worker locally (by default on <http://127.0.0.1:8787>). All state reads/writes go against the R2 bucket referenced in `wrangler.toml`, so consider pointing that binding to a development bucket.
 
-### Authentication headers
+## Deployment
 
-The simple auth middleware reads these headers:
+```bash
+cd worker
+npm run deploy
+```
 
-- `x-user-id` (required)
-- `x-user-email` (optional)
+This runs `wrangler deploy`, uploading the latest bundle to Cloudflare. Ensure the production bucket is referenced in `wrangler.toml` (or override via `--name`/`--env`).
 
-Provide them when calling any route that requires authentication.
+## Configuration summary
 
-### User policy rules
+| Setting | Where | Notes |
+| --- | --- | --- |
+| `VOLLEY_MEDIA` | `wrangler.toml` (`[[r2_buckets]]`) | Binds the `videos` bucket that stores user uploads and other binary blobs. |
+| `VOLLEY_DATA` | `wrangler.toml` (`[[r2_buckets]]`) | Binds the `volleyplus-storage` bucket that stores JSON collections (`data/users.json`, `matchReports/...`, etc.). |
+| `JWT_SECRET` | `wrangler secret put JWT_SECRET` | HMAC secret for issuing/validating access tokens. Use a long random string. |
 
-`src/config/userPolicies.js` centralizes plan limits:
+Optional values (rate limits, TTLs, etc.) can be hard-coded or promoted to additional Wrangler vars as you evolve the worker.
 
-- **paid**: faster transfers (100 Mbps up / 200 Mbps down) and uploads up to 10 GB, with the same 10 GB available for storage.
-- **free**: capped at 10 Mbps up / 20 Mbps down and limited to 2 GB of storage/upload size.
+## Authentication
 
-Use `getUserPolicy(plan)` whenever you need to enforce quotas or tune throttling logic.
+- `POST /auth/register` — Validates profile fields, hashes passwords with WebCrypto, writes to `data/users.json` in R2, and returns `{ user, accessToken }`.
+- `POST /auth/login` — Verifies credentials and returns `{ user, accessToken }`.
+
+Use `Authorization: Bearer <accessToken>` for every protected route (`/upload`, `/download/generate`, `/upload/completed`, `/stats/match-report`, etc.).
+
+## Upload workflow
+
+- `POST /upload` — Accepts `multipart/form-data` with a `file` field. Files are namespaced as `<userId>/<originalName>`. PDFs are deduplicated per user (existing key ⇒ HTTP 409). Response includes `{ key, metadata }`.
+- `GET /upload/completed` — Returns all stored metadata files under `uploads/completed/<userId>/`.
+- `GET /upload/incomplete` — Placeholder endpoint that lists any JSON entries saved under `uploads/incomplete/<userId>/`.
+
+All uploaded objects land directly in `VOLLEY_MEDIA` with metadata storing `ownerId` + `originalFileName`.
+
+## Download tokens
+
+- `POST /download/generate` — Persists `{ token, userId, fileName, expiresAt }` inside `downloadTokens/<token>.json`. Returns a relative `/download/use/<token>` URL plus TTL metadata.
+- `GET /download/use/:token` — Streams the file directly from the `VOLLEY_MEDIA` bucket. Returns 404 for missing tokens/files and 410 for expired ones.
+
+## Match reports
+
+- `POST /stats/match-report` — Same JSON contract as the previous Express endpoint. Requires auth, stores `ownerId`, and blocks duplicates (matching `matchDate` + team set) with HTTP 409 and the existing `matchId`.
+- `GET /stats/match-report` — Lists latest reports, with optional `?limit=` (1–100) and `?ownerId=<userId>` filtering.
+- `GET /stats/match-report/:matchId` — Fetches a single report by ID.
+
+Internally the worker keeps (inside `VOLLEY_DATA`):
+
+- `matchReports/data/<timestamp>_<uuid>.json` — canonical records.
+- `matchReports/by-match-id/<uuid>.json` — index pointing to the canonical file.
+- `matchReports/by-signature/<date>__<teamA>__<teamB>.json` — duplicate guard map.
+
+## Data storage
+
+- `data/users.json` — Array of registered users + password hashes/salts.
+- `downloadTokens/*.json` — Issued download token metadata.
+- `uploads/completed/<userId>/<key>.json` — Metadata for finished uploads. (Extend as needed for incomplete uploads, resumable tracking, etc.)
+- `matchReports/...` — Match report documents and indexes described above.
+
+Feel free to introduce additional prefixes for new collections — use the helpers in `worker/src/services/jsonStore.service.ts` to keep JSON persistence consistent.
+
+## Troubleshooting
+
+- Run `npx wrangler dev --local` if you prefer the Miniflare simulator with local-only storage.
+- Clearing buckets between runs is often easier than hand-editing JSON files. Consider pointing `VOLLEY_MEDIA`/`VOLLEY_DATA` to disposable dev buckets.
+- If Wrangler warns about an outdated version, upgrade inside `worker/package.json` (`npm install --save-dev wrangler@latest`).
+
+Enjoy the fully serverless version of Volley Plus! PRs or issues are welcome if you extend the Worker with additional routes or bindings.
