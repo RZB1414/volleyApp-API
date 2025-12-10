@@ -1,0 +1,12 @@
+name = "volleyapp-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-08"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "VOLLEY_MEDIA"
+bucket_name = "videos"
+
+[[r2_buckets]]
+binding = "VOLLEY_DATA"
+bucket_name = "volleyplus-storage"
