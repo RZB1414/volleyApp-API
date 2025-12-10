@@ -10,12 +10,24 @@ import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
 
+const allowedOrigins = [
+	'http://localhost:5173',
+	'https://volleyapp-api.volleyplusapp.workers.dev'
+];
+
 app.use('*', cors({
-	origin: (origin) => origin ?? '*',
+	origin: (origin) => {
+		if (!origin) {
+			return allowedOrigins[0];
+		}
+
+		return allowedOrigins.includes(origin) ? origin : '';
+	},
 	allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-	allowHeaders: ['Content-Type', 'Authorization'],
+	allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-email'],
 	exposeHeaders: ['Content-Disposition'],
-	maxAge: 86400
+	maxAge: 86400,
+	credentials: true
 }));
 
 registerHealthRoutes(app);

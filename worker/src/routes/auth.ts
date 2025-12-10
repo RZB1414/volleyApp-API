@@ -5,10 +5,12 @@ import { normalizePlayerNumber } from '../utils/playerNumber';
 import {
   createUser,
   findUserByEmail,
+  findUserById,
   sanitizeUser,
   StoredTeamHistoryEntry
 } from '../services/userStore.service';
 import { signJwt } from '../utils/jwt';
+import { requireAuth, getRequestUser } from '../middleware/auth';
 
 const authRouter = new Hono<AppEnv>();
 const encoder = new TextEncoder();
@@ -334,6 +336,25 @@ authRouter.post('/auth/login', async (c: Context<AppEnv>) => {
   } catch (error) {
     console.error('Login error', error);
     return c.json({ message: 'Failed to authenticate' }, 500);
+  }
+});
+
+authRouter.get('/auth/me', requireAuth, async (c: Context<AppEnv>) => {
+  try {
+    const requestUser = getRequestUser(c);
+    if (!requestUser) {
+      return c.json({ message: 'Authentication required' }, 401);
+    }
+
+    const user = await findUserById(c.env, requestUser.id);
+    if (!user) {
+      return c.json({ message: 'User not found' }, 404);
+    }
+
+    return c.json({ user: sanitizeUser(user) });
+  } catch (error) {
+    console.error('Fetch current user error', error);
+    return c.json({ message: 'Failed to load user profile' }, 500);
   }
 });
 
