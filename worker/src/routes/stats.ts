@@ -7,7 +7,8 @@ import {
   DuplicateMatchReportError,
   findMatchReportByMatchId,
   insertMatchReport,
-  listMatchReports
+  listMatchReports,
+  deleteMatchReport
 } from '../services/matchReport.service';
 
 const statsRouter = new Hono<AppEnv>();
@@ -120,6 +121,37 @@ statsRouter.get('/stats/match-report', async (c: Context<AppEnv>) => {
 
     console.error('Failed to list match reports', error);
     return c.json({ message: 'Failed to list match reports' }, 500);
+  }
+});
+
+statsRouter.delete('/stats/match-report/:matchId', requireAuth, async (c: Context<AppEnv>) => {
+  try {
+    const user = getRequestUser(c);
+    if (!user) {
+      return c.json({ message: 'Authentication required' }, 401);
+    }
+
+    const { matchId } = matchIdParamSchema.parse(c.req.param());
+    const result = await deleteMatchReport(c.env, matchId, { ownerId: user.id });
+
+    if (!result.ok) {
+      if (result.code === 'not-found') {
+        return c.json({ message: 'Match report not found' }, 404);
+      }
+
+      if (result.code === 'forbidden') {
+        return c.json({ message: 'You cannot delete this match report' }, 403);
+      }
+    }
+
+    return c.json({ message: 'Match report deleted' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ message: 'Invalid request', errors: error.flatten() }, 400);
+    }
+
+    console.error('Failed to delete match report', error);
+    return c.json({ message: 'Failed to delete match report' }, 500);
   }
 });
 

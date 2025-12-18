@@ -12,7 +12,7 @@ const app = new Hono<AppEnv>();
 
 const allowedOrigins = [
 	'http://localhost:5173',
-	'https://volleyapp-api.volleyplusapp.workers.dev'
+	'https://volleyplus.pages.dev'
 ];
 
 app.use('*', cors({

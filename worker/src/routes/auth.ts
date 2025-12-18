@@ -16,6 +16,23 @@ const authRouter = new Hono<AppEnv>();
 const encoder = new TextEncoder();
 const MIN_PASSWORD_LENGTH = 9;
 
+function maskEmailForLog(email: string) {
+  const trimmed = email.trim().toLowerCase();
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex <= 0 || atIndex === trimmed.length - 1) {
+    return '<invalid-email>';
+  }
+
+  const local = trimmed.slice(0, atIndex);
+  const domain = trimmed.slice(atIndex + 1);
+  const prefix = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
+  return `${prefix}***@${domain}`;
+}
+
+function getRequestId(c: Context<AppEnv>) {
+  return c.req.header('cf-ray') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
+}
+
 function normalizeEmail(email: unknown) {
   const value = typeof email === 'string' ? email : '';
   const trimmed = value.trim().toLowerCase();
@@ -264,6 +281,7 @@ async function generateAccessToken(env: AppEnv['Bindings'], user: { id: string; 
 }
 
 authRouter.post('/auth/register', async (c: Context<AppEnv>) => {
+  const requestId = getRequestId(c);
   try {
     const body = (await c.req.json()) as Record<string, unknown>;
     const { errors, name, email, password, ageValue, yearsValue } = buildValidationErrors(body);
@@ -306,35 +324,69 @@ authRouter.post('/auth/register', async (c: Context<AppEnv>) => {
     const accessToken = await generateAccessToken(c.env, newUser);
     return c.json({ user: sanitizeUser(newUser), accessToken }, 201);
   } catch (error) {
-    console.error('Register error', error);
+    const errorPayload =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) };
+    console.error('[auth.register] unexpected_error', { requestId, error: errorPayload });
     return c.json({ message: 'Failed to register user' }, 500);
   }
 });
 
 authRouter.post('/auth/login', async (c: Context<AppEnv>) => {
+  const requestId = getRequestId(c);
   try {
     const body = (await c.req.json()) as Record<string, unknown>;
     const email = normalizeEmail(body.email);
     const password = typeof body.password === 'string' ? body.password : '';
 
+    console.log('[auth.login] attempt', {
+      requestId,
+      email: email ? maskEmailForLog(email) : null,
+      hasPassword: password.length > 0
+    });
+
     if (!email || password.length === 0) {
+      console.log('[auth.login] validation_failed', {
+        requestId,
+        hasEmail: Boolean(email),
+        passwordLength: password.length
+      });
       return c.json({ message: 'Email and password are required' }, 400);
     }
 
     const user = await findUserByEmail(c.env, email);
     if (!user) {
+      console.log('[auth.login] user_not_found', {
+        requestId,
+        email: maskEmailForLog(email)
+      });
       return c.json({ message: 'Invalid email or password' }, 401);
     }
 
     const passwordMatches = await verifyPassword(password, user.passwordSalt, user.passwordHash);
     if (!passwordMatches) {
+      console.log('[auth.login] invalid_password', {
+        requestId,
+        userId: user.id,
+        email: maskEmailForLog(email)
+      });
       return c.json({ message: 'Invalid email or password' }, 401);
     }
 
     const accessToken = await generateAccessToken(c.env, user);
+
+    console.log('[auth.login] success', {
+      requestId,
+      userId: user.id
+    });
     return c.json({ user: sanitizeUser(user), accessToken });
   } catch (error) {
-    console.error('Login error', error);
+    const errorPayload =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) };
+    console.error('[auth.login] unexpected_error', { requestId, error: errorPayload });
     return c.json({ message: 'Failed to authenticate' }, 500);
   }
 });

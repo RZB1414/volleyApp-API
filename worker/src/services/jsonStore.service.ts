@@ -5,7 +5,7 @@ const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
 type JsonValue = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
 export async function readJSON<T = JsonValue>(env: AppBindings, key: string): Promise<T | null> {
-  const object = await env.VOLLEY_DATA.get(key, { type: 'text' });
+  const object = await env.VOLLEY_DATA.get(key);
   if (!object) {
     return null;
   }

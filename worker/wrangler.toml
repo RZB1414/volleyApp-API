@@ -6,7 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [[r2_buckets]]
 binding = "VOLLEY_MEDIA"
 bucket_name = "videos"
+preview_bucket_name = "volleyplus-media-dev"
 
 [[r2_buckets]]
 binding = "VOLLEY_DATA"
 bucket_name = "volleyplus-storage"
+preview_bucket_name = "volleyplus-data-dev"

@@ -239,3 +239,40 @@ export async function listMatchReports(
     .filter((report): report is MatchReport => Boolean(report))
     .filter((report) => (normalizedOwnerId ? report.ownerId === normalizedOwnerId : true));
 }
+
+export type DeleteMatchReportResult =
+  | { ok: true }
+  | { ok: false; code: 'not-found' | 'forbidden' };
+
+export async function deleteMatchReport(
+  env: AppBindings,
+  matchId: string,
+  { ownerId }: { ownerId: string }
+): Promise<DeleteMatchReportResult> {
+  const indexKey = buildIndexKey(matchId);
+  const index = await readJSON<{ key?: string }>(env, indexKey);
+  if (!index?.key) {
+    return { ok: false, code: 'not-found' };
+  }
+
+  const doc = await readJSON<StoredMatchReport>(env, index.key);
+  if (!doc) {
+    await deleteJSON(env, indexKey).catch(() => undefined);
+    return { ok: false, code: 'not-found' };
+  }
+
+  if (doc.ownerId !== ownerId) {
+    return { ok: false, code: 'forbidden' };
+  }
+
+  const signature = buildMatchSignature(doc.matchDate, doc.teams);
+
+  await deleteJSON(env, index.key).catch(() => undefined);
+  await deleteJSON(env, indexKey).catch(() => undefined);
+
+  if (signature) {
+    await deleteJSON(env, buildSignatureKey(signature)).catch(() => undefined);
+  }
+
+  return { ok: true };
+}
