@@ -12,37 +12,56 @@ const processSchema = z.object({
     matchId: z.string().uuid().optional() // Optional override
 });
 
-// Trigger processing of a Raw DVW JSON file in R2
+// Upload and Process DVW file
 dvwRouter.post('/process', requireAuth, async (c) => {
     try {
-        const body = await c.req.json();
-        const { filename } = processSchema.parse(body);
+        const formData = await c.req.parseBody();
+        const file = formData['file']; // Assuming the field name is 'file'
 
-        const r2 = c.env.VOLLEY_DATA;
-
-        // 1. Read Raw JSON from R2
-        const object = await r2.get(`raw/${filename}`);
-        if (!object) {
-            return c.json({ message: 'File not found in R2 (raw/)' }, 404);
+        if (!file || !(file instanceof File)) {
+            return c.json({ message: 'File is required' }, 400);
         }
 
-        const rawData = await object.json();
+        if (!c.env.R_PARSER_URL) {
+            return c.json({ message: 'R_PARSER_URL not configured' }, 500);
+        }
+
+        // 1. Send to R Parser Service
+        const rFormData = new FormData();
+        rFormData.append('file', file);
+
+        console.log(`Sending file ${file.name} to R Parser at ${c.env.R_PARSER_URL}`);
+
+        const rResponse = await fetch(c.env.R_PARSER_URL, {
+            method: 'POST',
+            body: rFormData
+        });
+
+        if (!rResponse.ok) {
+            const errText = await rResponse.text();
+            console.error('R Parser Error:', errText);
+            return c.json({ message: 'Failed to parse file via R service', details: errText }, 502);
+        }
+
+        const rawData = await rResponse.json();
 
         // 2. Transform / Normalize
         const matchReport = transformDvwToMatchReport(rawData);
 
         // 3. Save Processed JSON to R2
-        const processedFilename = filename.replace('.json', '_processed.json');
+        const r2 = c.env.VOLLEY_DATA;
+        const processedFilename = file.name.replace(/\.dvw$/i, '') + '_processed.json';
+
+        // Also save the Raw JSON for debugging/backup if desired
+        const rawFilename = file.name.replace(/\.dvw$/i, '') + '_raw.json';
+        await r2.put(`raw/${rawFilename}`, JSON.stringify(rawData), {
+            httpMetadata: { contentType: 'application/json' }
+        });
+
         await r2.put(`processed/${processedFilename}`, JSON.stringify(matchReport), {
             httpMetadata: { contentType: 'application/json' }
         });
 
-        // 4. Insert into Database (Match Reports)
-        // We need an ownerId. Assuming auth user.
-        // const user = c.get('user'); // Assuming middleware sets this (need to check type safety)
-        // user is available via getRequestUser usually or c.var.user if defined
-
-        // For now, returning the report to verify
         return c.json({
             message: 'Processed successfully',
             processedFile: processedFilename,
@@ -51,10 +70,7 @@ dvwRouter.post('/process', requireAuth, async (c) => {
 
     } catch (error) {
         console.error('Processing error:', error);
-        if (error instanceof z.ZodError) {
-            return c.json({ message: 'Invalid payload', errors: error.flatten() }, 400);
-        }
-        return c.json({ message: 'Internal Processing Error' }, 500);
+        return c.json({ message: 'Internal Processing Error', error: String(error) }, 500);
     }
 });
 

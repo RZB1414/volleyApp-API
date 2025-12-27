@@ -12,3 +12,4 @@ R2_ACCESS_KEY_ID=your_access_key_id
 R2_SECRET_ACCESS_KEY=your_secret_access_key
 R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
 # Optional: R2_BUCKET_NAME=volleyplus-storage
+R_PARSER_URL=https://your-railway-app.up.railway.app/parse

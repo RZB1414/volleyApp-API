@@ -53,6 +53,7 @@ export type AppBindings = {
   VOLLEY_MEDIA: R2Bucket;
   VOLLEY_DATA: R2Bucket;
   JWT_SECRET: string;
+  R_PARSER_URL: string;
   LOG_AUTH_FINGERPRINT?: string;
 };
 
