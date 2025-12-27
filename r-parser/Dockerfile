@@ -11,8 +11,9 @@ RUN apt-get update -qq && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install R packages
-# datavolley is the core requirement
-RUN R -e "install.packages(c('datavolley', 'jsonlite', 'aws.s3', 'dotenv'), repos='https://cloud.r-project.org/')"
+# datavolley is not on CRAN, install from GitHub
+RUN R -e "install.packages(c('remotes', 'jsonlite', 'aws.s3', 'dotenv'), repos='https://cloud.r-project.org/')"
+RUN R -e "remotes::install_github('openvolley/datavolley')"
 
 # Copy the app files
 COPY . /app
