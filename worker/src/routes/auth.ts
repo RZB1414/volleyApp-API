@@ -16,6 +16,29 @@ const authRouter = new Hono<AppEnv>();
 const encoder = new TextEncoder();
 const MIN_PASSWORD_LENGTH = 9;
 
+function isTruthy(value: unknown) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function toBase64Url(bytes: Uint8Array) {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function jwtFingerprint(token: string) {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(token));
+  const hash = toBase64Url(new Uint8Array(digest));
+  return hash.slice(0, 12);
+}
+
 function maskEmailForLog(email: string) {
   const trimmed = email.trim().toLowerCase();
   const atIndex = trimmed.indexOf('@');
@@ -322,6 +345,13 @@ authRouter.post('/auth/register', async (c: Context<AppEnv>) => {
     });
 
     const accessToken = await generateAccessToken(c.env, newUser);
+    if (isTruthy(c.env.LOG_AUTH_FINGERPRINT)) {
+      console.log('[auth.register] issued_token_fingerprint', {
+        requestId,
+        userId: newUser.id,
+        tokenFp: await jwtFingerprint(accessToken)
+      });
+    }
     return c.json({ user: sanitizeUser(newUser), accessToken }, 201);
   } catch (error) {
     const errorPayload =
@@ -375,6 +405,14 @@ authRouter.post('/auth/login', async (c: Context<AppEnv>) => {
     }
 
     const accessToken = await generateAccessToken(c.env, user);
+
+    if (isTruthy(c.env.LOG_AUTH_FINGERPRINT)) {
+      console.log('[auth.login] issued_token_fingerprint', {
+        requestId,
+        userId: user.id,
+        tokenFp: await jwtFingerprint(accessToken)
+      });
+    }
 
     console.log('[auth.login] success', {
       requestId,

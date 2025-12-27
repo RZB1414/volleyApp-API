@@ -6,6 +6,8 @@ import { registerAuthRoutes } from './routes/auth';
 import { registerUploadRoutes } from './routes/upload';
 import { registerDownloadRoutes } from './routes/download';
 import { registerStatsRoutes } from './routes/stats';
+import { registerDvwRoutes } from './routes/dvw';
+
 import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
@@ -35,5 +37,7 @@ registerAuthRoutes(app);
 registerUploadRoutes(app);
 registerDownloadRoutes(app);
 registerStatsRoutes(app);
+registerDvwRoutes(app);
+
 
 export default app;

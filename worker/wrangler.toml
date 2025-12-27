@@ -1,6 +1,6 @@
 name = "volleyapp-api"
 main = "src/index.ts"
-compatibility_date = "2025-12-08"
+compatibility_date = "2025-07-18"
 compatibility_flags = ["nodejs_compat"]
 
 [[r2_buckets]]
@@ -10,5 +10,10 @@ preview_bucket_name = "volleyplus-media-dev"
 
 [[r2_buckets]]
 binding = "VOLLEY_DATA"
-bucket_name = "volleyplus-storage"
+bucket_name = "dvwfiles"
 preview_bucket_name = "volleyplus-data-dev"
+
+
+
+[vars]
+LOG_AUTH_FINGERPRINT = "true"

@@ -1,0 +1,14 @@
+# Local development secrets (DO NOT COMMIT)
+JWT_SECRET=your-secret-here
+
+# Cloudflare R2 / S3 API
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+# Optional: R2_BUCKET_NAME=volleyplus-storage
+
+# Cloudflare R2 / S3 API
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+# Optional: R2_BUCKET_NAME=volleyplus-storage

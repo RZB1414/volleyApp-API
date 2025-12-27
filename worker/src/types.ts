@@ -1,3 +1,5 @@
+import type { Queue } from '@cloudflare/workers-types';
+
 export type R2GetType = 'text' | 'json' | 'arrayBuffer' | 'stream';
 
 export interface R2GetOptions {
@@ -51,6 +53,7 @@ export type AppBindings = {
   VOLLEY_MEDIA: R2Bucket;
   VOLLEY_DATA: R2Bucket;
   JWT_SECRET: string;
+  LOG_AUTH_FINGERPRINT?: string;
 };
 
 export type AppEnv = {
