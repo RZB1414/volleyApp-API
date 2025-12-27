@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head><title>R: Reading and Analyzing DataVolley Scout Files</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<link rel="stylesheet" type="text/css" href="R.css">
+</head><body><div class="container">
+<h1> Reading and Analyzing DataVolley Scout Files
+<img class="toplogo" src="../../../doc/html/Rlogo.svg" alt="[R logo]">
+</h1>
+<hr>
+<div style="text-align: center;">
+<a href="../../../doc/html/packages.html"><img class="arrow" src="../../../doc/html/left.jpg" alt="[Up]"></a>
+<a href="../../../doc/html/index.html"><img class="arrow" src="../../../doc/html/up.jpg" alt="[Top]"></a>
+</div><h2>Documentation for package &lsquo;datavolley&rsquo; version 1.14.4</h2>
+
+<ul><li><a href="../DESCRIPTION" type="text/plain; charset=utf-8">DESCRIPTION file</a>.</li>
+<li><a href="../NEWS.md">Package NEWS</a>.</li>
+</ul>
+
+<h2>Help Pages</h2>
+
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="datavolley.html">datavolley-package</a></td>
+<td>'datavolley'</td></tr>
+<tr><td style="width: 25%;"><a href="check_player_names.html">check_player_names</a></td>
+<td>Check for similar player names</td></tr>
+<tr><td style="width: 25%;"><a href="datavolley.html">datavolley</a></td>
+<td>'datavolley'</td></tr>
+<tr><td style="width: 25%;"><a href="dvlist_summary.html">dvlist_summary</a></td>
+<td>Summarize a list of volleyball matches</td></tr>
+<tr><td style="width: 25%;"><a href="dv_action2text.html">dv_action2text</a></td>
+<td>Generate a short, human-readable text summary of one or more actions</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_code2desc.html">dv_attack_code2desc</a></td>
+<td>Nominal descriptions for standard attack codes</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_code2loc.html">dv_attack_code2loc</a></td>
+<td>Nominal starting coordinate for standard attack codes</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_code2set_type.html">dv_attack_code2set_type</a></td>
+<td>Set type for standard attack codes</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_code2side.html">dv_attack_code2side</a></td>
+<td>Attack side for standard attack codes</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_code_map.html">dv_attack_code_map</a></td>
+<td>Translate attack type and starting zone into an attack code.</td></tr>
+<tr><td style="width: 25%;"><a href="dv_attack_phase.html">dv_attack_phase</a></td>
+<td>Attack phase</td></tr>
+<tr><td style="width: 25%;"><a href="dv_cone2xy.html">dv_cone2xy</a></td>
+<td>Attack cones to x, y coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_cone_polygons.html">dv_cone_polygons</a></td>
+<td>The polygon coordinates for attack cones</td></tr>
+<tr><td style="width: 25%;"><a href="dv_court.html">dv_court</a></td>
+<td>Plot a volleyball court diagram</td></tr>
+<tr><td style="width: 25%;"><a href="dv_create_meta_attacks.html">dv_create_meta_attacks</a></td>
+<td>Create a meta attack data.frame from the plays object if it is missing</td></tr>
+<tr><td style="width: 25%;"><a href="dv_example_file.html">dv_example_file</a></td>
+<td>Example DataVolley files provided as part of the datavolley package</td></tr>
+<tr><td style="width: 25%;"><a href="dv_fake_coordinates.html">dv_fake_coordinates</a></td>
+<td>Fake coordinate data</td></tr>
+<tr><td style="width: 25%;"><a href="dv_find_to_flip_coordinates.html">dv_find_to_flip_coordinates</a></td>
+<td>Find coordinates that need flipping</td></tr>
+<tr><td style="width: 25%;"><a href="dv_flip_xy.html">dv_flip_index</a></td>
+<td>Flip the x,y court coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_flip_xy.html">dv_flip_x</a></td>
+<td>Flip the x,y court coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_flip_xy.html">dv_flip_xy</a></td>
+<td>Flip the x,y court coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_flip_xy.html">dv_flip_y</a></td>
+<td>Flip the x,y court coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_heatmap.html">dv_heatmap</a></td>
+<td>Plot a court heatmap, using base graphics</td></tr>
+<tr><td style="width: 25%;"><a href="dv_index2xy.html">dv_index2xy</a></td>
+<td>Grid index to x,y coordinate and vice-versa</td></tr>
+<tr><td style="width: 25%;"><a href="dv_int2rgb.html">dv_int2rgb</a></td>
+<td>Convert integer colour to RGB</td></tr>
+<tr><td style="width: 25%;"><a href="dv_meta_video.html">dv_meta_video</a></td>
+<td>Get or set the video metadata in a datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="dv_meta_video.html">dv_meta_video&lt;-</a></td>
+<td>Get or set the video metadata in a datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="dv_plot_new.html">dv_plot_new</a></td>
+<td>Create a new plot page for base graphics plotting</td></tr>
+<tr><td style="width: 25%;"><a href="dv_point_phase.html">dv_point_phase</a></td>
+<td>Point phase</td></tr>
+<tr><td style="width: 25%;"><a href="dv_read.html">dv_read</a></td>
+<td>Read a DataVolley or VolleyStation file</td></tr>
+<tr><td style="width: 25%;"><a href="dv_read_sq.html">dv_read_sq</a></td>
+<td>Read a team roster (*.sq) file</td></tr>
+<tr><td style="width: 25%;"><a href="dv_repair.html">dv_repair</a></td>
+<td>Attempt to repair a datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="dv_int2rgb.html">dv_rgb2int</a></td>
+<td>Convert integer colour to RGB</td></tr>
+<tr><td style="width: 25%;"><a href="dv_sync_video.html">dv_sync_contact_times</a></td>
+<td>Synchronize video times</td></tr>
+<tr><td style="width: 25%;"><a href="dv_sync_video.html">dv_sync_offsets</a></td>
+<td>Synchronize video times</td></tr>
+<tr><td style="width: 25%;"><a href="dv_sync_summary.html">dv_sync_summary</a></td>
+<td>Summarize the video sync times in a dvw file</td></tr>
+<tr><td style="width: 25%;"><a href="dv_sync_video.html">dv_sync_video</a></td>
+<td>Synchronize video times</td></tr>
+<tr><td style="width: 25%;"><a href="dv_validate.html">dv_validate</a></td>
+<td>Additional validation checks on a DataVolley file</td></tr>
+<tr><td style="width: 25%;"><a href="dv_write.html">dv_write</a></td>
+<td>Write a datavolley object to dvw file</td></tr>
+<tr><td style="width: 25%;"><a href="dv_xy.html">dv_xy</a></td>
+<td>Court zones to x, y coordinates</td></tr>
+<tr><td style="width: 25%;"><a href="dv_xy2cone.html">dv_xy2cone</a></td>
+<td>Convert x, y coordinates to cones</td></tr>
+<tr><td style="width: 25%;"><a href="dv_index2xy.html">dv_xy2index</a></td>
+<td>Grid index to x,y coordinate and vice-versa</td></tr>
+<tr><td style="width: 25%;"><a href="dv_xy2subzone.html">dv_xy2subzone</a></td>
+<td>Convert x, y coordinates to zones and subzones</td></tr>
+<tr><td style="width: 25%;"><a href="dv_xy2zone.html">dv_xy2zone</a></td>
+<td>Convert x, y coordinates to zones</td></tr>
+<tr><td style="width: 25%;"><a href="findnext.html">findnext</a></td>
+<td>Find each entry in y that follows each entry in x</td></tr>
+<tr><td style="width: 25%;"><a href="findprev.html">findprev</a></td>
+<td>Find each entry in y that precedes each entry in x</td></tr>
+<tr><td style="width: 25%;"><a href="find_first_attack.html">find_first_attack</a></td>
+<td>Find first attacks by the receiving team (i.e. attacks associated with a serve reception)</td></tr>
+<tr><td style="width: 25%;"><a href="find_match.html">find_match</a></td>
+<td>Find a particular match in a list of datavolley objects</td></tr>
+<tr><td style="width: 25%;"><a href="find_player_name_remapping.html">find_player_name_remapping</a></td>
+<td>Attempt to build a player name remapping table</td></tr>
+<tr><td style="width: 25%;"><a href="find_runs.html">find_runs</a></td>
+<td>Generate information about runs of events</td></tr>
+<tr><td style="width: 25%;"><a href="find_serves.html">find_serves</a></td>
+<td>Find serves</td></tr>
+<tr><td style="width: 25%;"><a href="fix_ace_evaluations.html">fix_ace_evaluations</a></td>
+<td>Find aces that might not be marked as such</td></tr>
+<tr><td style="width: 25%;"><a href="ggcourt.html">ggcourt</a></td>
+<td>ggplot volleyball court</td></tr>
+<tr><td style="width: 25%;"><a href="teams.html">home_team</a></td>
+<td>Get team names and IDs from datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="teams.html">home_team_id</a></td>
+<td>Get team names and IDs from datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="inspect.html">inspect</a></td>
+<td>Convenience function for inspecting the plays component of a datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="plays.html">plays</a></td>
+<td>Extract the plays component from a datavolley object, or assign a new one</td></tr>
+<tr><td style="width: 25%;"><a href="plays.html">plays&lt;-</a></td>
+<td>Extract the plays component from a datavolley object, or assign a new one</td></tr>
+<tr><td style="width: 25%;"><a href="play_phase.html">play_phase</a></td>
+<td>Figure out the phase of play associated with each point</td></tr>
+<tr><td style="width: 25%;"><a href="print.summary.datavolley.html">print.summary.datavolley</a></td>
+<td>Print method for summary.datavolley</td></tr>
+<tr><td style="width: 25%;"><a href="print.summary.datavolleylist.html">print.summary.datavolleylist</a></td>
+<td>Print method for summary.datavolleylist</td></tr>
+<tr><td style="width: 25%;"><a href="dv_read.html">read_dv</a></td>
+<td>Read a DataVolley or VolleyStation file</td></tr>
+<tr><td style="width: 25%;"><a href="remap_player_info.html">remap_player_info</a></td>
+<td>Change player information</td></tr>
+<tr><td style="width: 25%;"><a href="remap_player_names.html">remap_player_names</a></td>
+<td>Change player names</td></tr>
+<tr><td style="width: 25%;"><a href="remap_team_names.html">remap_team_names</a></td>
+<td>Change team names</td></tr>
+<tr><td style="width: 25%;"><a href="serve_win_points.html">serve_win_points</a></td>
+<td>Find serve win points</td></tr>
+<tr><td style="width: 25%;"><a href="skill_evaluation_decoder.html">skill_evaluation_decoder</a></td>
+<td>Translate skill evaluation codes into meaningful summary phrases</td></tr>
+<tr><td style="width: 25%;"><a href="summary.datavolley.html">summary.datavolley</a></td>
+<td>A simple summary of a volleyball match</td></tr>
+<tr><td style="width: 25%;"><a href="teams.html">teams</a></td>
+<td>Get team names and IDs from datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="dv_validate.html">validate_dv</a></td>
+<td>Additional validation checks on a DataVolley file</td></tr>
+<tr><td style="width: 25%;"><a href="teams.html">visiting_team</a></td>
+<td>Get team names and IDs from datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="teams.html">visiting_team_id</a></td>
+<td>Get team names and IDs from datavolley object</td></tr>
+<tr><td style="width: 25%;"><a href="dv_write.html">write_dv</a></td>
+<td>Write a datavolley object to dvw file</td></tr>
+</table>
+</div></body></html>

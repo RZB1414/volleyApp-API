@@ -1,0 +1,46 @@
+Package: datavolley
+Title: Reading and Analyzing DataVolley Scout Files
+Version: 1.14.4
+Authors@R: c(person("Ben", "Raymond", email = "ben@untan.gl", role = c("aut", "cre")),
+             person("Adrien", "Ickowicz", role = "aut"),
+             person("Tyler", "Widdison", role = "aut"),
+             person("David", "Awosoga", role = "ctb"),
+             person("Christophe", "Elek", role = "ctb"),
+             person("Kornel", "Kilinski", role = "ctb"),
+             person("openvolley.org", role = "org"))
+Description: Provides functions for parsing and working with volleyball match files in DataVolley format.
+Depends: R (>= 3.2.4)
+URL: https://datavolley.openvolley.org,
+        https://github.com/openvolley/datavolley
+BugReports: https://github.com/openvolley/datavolley/issues
+Imports: assertthat, data.table, digest, dplyr, jpeg, jsonlite,
+        lubridate, methods, polyclip, readr, stringi, stringr,
+        vscoututils (>= 0.2.3), xml2
+Suggests: testthat, ggplot2, knitr, MASS, raster, rmarkdown, covr
+Encoding: UTF-8
+License: MIT + file LICENSE
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+VignetteBuilder: knitr
+Remotes: openvolley/vscoututils
+RemoteType: github
+RemoteHost: api.github.com
+RemoteRepo: datavolley
+RemoteUsername: openvolley
+RemoteRef: HEAD
+RemoteSha: fc941830973a43c98137643cb372dbe471776f7e
+GithubRepo: datavolley
+GithubUsername: openvolley
+GithubRef: HEAD
+GithubSHA1: fc941830973a43c98137643cb372dbe471776f7e
+NeedsCompilation: no
+Packaged: 2025-12-25 11:58:18 UTC; rzbui
+Author: Ben Raymond [aut, cre],
+  Adrien Ickowicz [aut],
+  Tyler Widdison [aut],
+  David Awosoga [ctb],
+  Christophe Elek [ctb],
+  Kornel Kilinski [ctb],
+  openvolley.org [org]
+Maintainer: Ben Raymond <ben@untan.gl>
+Built: R 4.5.2; ; 2025-12-25 11:58:22 UTC; windows

@@ -88,6 +88,7 @@ All uploaded objects land directly in `VOLLEY_MEDIA` with metadata storing `owne
 - `POST /stats/match-report` — Same JSON contract as the previous Express endpoint. Requires auth, stores `ownerId`, and blocks duplicates (matching `matchDate` + team set) with HTTP 409 and the existing `matchId`.
 - `GET /stats/match-report` — Lists latest reports, with optional `?limit=` (1–100) and `?ownerId=<userId>` filtering.
 - `GET /stats/match-report/:matchId` — Fetches a single report by ID.
+- `DELETE /stats/match-report/:matchId` — Authenticated route that deletes a saved report if (and only if) the requester is the owner.
 
 Internally the worker keeps (inside `VOLLEY_DATA`):
 
@@ -106,7 +107,7 @@ Feel free to introduce additional prefixes for new collections — use the helpe
 
 ## Troubleshooting
 
-- Run `npx wrangler dev --local` if you prefer the Miniflare simulator with local-only storage.
+- Use `npx wrangler dev --remote` to run against the Cloudflare runtime and persist to real bindings (R2, secrets), matching deploy behavior.
 - Clearing buckets between runs is often easier than hand-editing JSON files. Consider pointing `VOLLEY_MEDIA`/`VOLLEY_DATA` to disposable dev buckets.
 - If Wrangler warns about an outdated version, upgrade inside `worker/package.json` (`npm install --save-dev wrangler@latest`).
 

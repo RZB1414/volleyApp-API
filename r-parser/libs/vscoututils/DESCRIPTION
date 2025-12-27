@@ -1,0 +1,31 @@
+Package: vscoututils
+Title: Utility Functions for Volleyball Scout Files
+Version: 0.2.3
+Authors@R: c(person("Ben", "Raymond", email = "ben@untan.gl", role = c("aut", "cre")),
+             person("Adrien", "Ickowicz", role = "aut"))
+Description: Common utility functions shared across various volleyball scouting and data access packages. Functions in this package are likely to be mostly of interest to package developers, rather than end users.
+Depends: R (>= 4.0.0)
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports: assertthat, base64enc, digest, dplyr, lubridate, methods,
+        stringr
+Suggests: ovdata, testthat
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Remotes: openvolley/ovdata
+RemoteType: github
+RemoteHost: api.github.com
+RemoteRepo: vscoututils
+RemoteUsername: openvolley
+RemoteRef: HEAD
+RemoteSha: 7f39d37a56d5552241c4e262461cb0548f25722c
+GithubRepo: vscoututils
+GithubUsername: openvolley
+GithubRef: HEAD
+GithubSHA1: 7f39d37a56d5552241c4e262461cb0548f25722c
+NeedsCompilation: no
+Packaged: 2025-12-25 11:57:25 UTC; rzbui
+Author: Ben Raymond [aut, cre],
+  Adrien Ickowicz [aut]
+Maintainer: Ben Raymond <ben@untan.gl>
+Built: R 4.5.2; ; 2025-12-25 11:57:27 UTC; windows

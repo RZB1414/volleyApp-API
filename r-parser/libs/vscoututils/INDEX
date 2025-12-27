@@ -1,0 +1,77 @@
+dv_create_file_meta     Create the 'file_meta' component of a
+                        datavolley object
+dv_create_meta          Create metadata component of a datavolley
+                        object
+dv_create_meta_attack_combos
+                        Create the 'attacks' metadata component of a
+                        datavolley object
+dv_create_meta_comments
+                        Create the 'comments' metadata component of a
+                        datavolley object
+dv_create_meta_match    Create the 'match' metadata component of a
+                        datavolley object
+dv_create_meta_match_id
+                        Create the 'match_id' metadata component of a
+                        datavolley object
+dv_create_meta_more     Create the 'more' metadata component of a
+                        datavolley object
+dv_create_meta_players
+                        Create the 'players_h' or 'players_v' metadata
+                        component of a datavolley object
+dv_create_meta_result   Create the 'result' metadata component of a
+                        datavolley object
+dv_create_meta_setter_calls
+                        Create the 'sets' (setter calls) metadata
+                        component of a datavolley object
+dv_create_meta_teams    Create the 'teams' metadata component of a
+                        datavolley object
+dv_create_meta_video    Create the 'video' metadata component of a
+                        datavolley object
+dv_decode_evaluation    Decode evaluation codes
+dv_decode_num_players   Decode number of players
+dv_decode_skill_subtype
+                        Decode skill subtypes
+dv_decode_skill_type    Decode skill type (tempo) codes
+dv_decode_special_code
+                        Decode special codes
+dv_default_attack_combos
+                        Default attack combination codes table
+dv_default_num_players
+                        Default number of players table
+dv_default_scouting_table
+                        Default scouting (type and evaluation for each
+                        skill) table
+dv_default_setter_calls
+                        Default setter calls table
+dv_default_skill_evaluations
+                        Default skill evaluation table
+dv_default_skill_subtypes
+                        Default skill_subtype (type of hit) table
+dv_default_skill_types
+                        Default skill_type (tempo) table
+dv_default_special_codes
+                        Default special codes table
+dv_default_winning_symbols
+                        Default winning symbols table
+dv_expand_rally_codes   Expand scouted rally codes
+dv_file_type            Detect scout file type
+dv_get_player_meta      Extract player metadata by team and jersey
+                        number
+dv_green_codes          Add green codes to the scouted codes from a
+                        rally
+dv_insert_sets          Insert setting actions for attacks that have
+                        not been scouted with sets
+dv_insert_sets_check    Find attacks for which we could insert missing
+                        setting actions
+dv_insert_technical_timeouts
+                        Insert technical timeouts
+dv_update_meta          Update the metadata component of a datavolley
+                        object
+pv_default_errortypes   Define errortype interpretations
+pv_default_eventgrades
+                        Define eventgrade interpretations
+pv_default_eventtypes   Lookup tables for Perana Sports database codes
+pv_default_subevents    Define subevent interpretations
+pv_default_subevents2   Define subevent2 interpretations
+pv_parse_ballstring     Parse a ballstring found in Perana Sports files
+vscoututils             'vscoututils'

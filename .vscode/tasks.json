@@ -6,6 +6,9 @@
       "type": "shell",
       "command": "npm",
       "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/worker"
+      },
       "problemMatcher": [],
       "group": "build"
     }

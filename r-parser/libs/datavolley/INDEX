@@ -1,0 +1,79 @@
+check_player_names      Check for similar player names
+datavolley              'datavolley'
+dv_action2text          Generate a short, human-readable text summary
+                        of one or more actions
+dv_attack_code2desc     Nominal descriptions for standard attack codes
+dv_attack_code2loc      Nominal starting coordinate for standard attack
+                        codes
+dv_attack_code2set_type
+                        Set type for standard attack codes
+dv_attack_code2side     Attack side for standard attack codes
+dv_attack_code_map      Translate attack type and starting zone into an
+                        attack code.
+dv_attack_phase         Attack phase
+dv_cone2xy              Attack cones to x, y coordinates
+dv_cone_polygons        The polygon coordinates for attack cones
+dv_court                Plot a volleyball court diagram
+dv_create_meta_attacks
+                        Create a meta attack data.frame from the plays
+                        object if it is missing
+dv_example_file         Example DataVolley files provided as part of
+                        the datavolley package
+dv_fake_coordinates     Fake coordinate data
+dv_find_to_flip_coordinates
+                        Find coordinates that need flipping
+dv_flip_xy              Flip the x,y court coordinates
+dv_heatmap              Plot a court heatmap, using base graphics
+dv_index2xy             Grid index to x,y coordinate and vice-versa
+dv_int2rgb              Convert integer colour to RGB
+dv_meta_video           Get or set the video metadata in a datavolley
+                        object
+dv_plot_new             Create a new plot page for base graphics
+                        plotting
+dv_point_phase          Point phase
+dv_read                 Read a DataVolley or VolleyStation file
+dv_read_sq              Read a team roster (*.sq) file
+dv_repair               Attempt to repair a datavolley object
+dv_sync_summary         Summarize the video sync times in a dvw file
+dv_sync_video           Synchronize video times
+dv_validate             Additional validation checks on a DataVolley
+                        file
+dv_write                Write a datavolley object to dvw file
+dv_xy                   Court zones to x, y coordinates
+dv_xy2cone              Convert x, y coordinates to cones
+dv_xy2subzone           Convert x, y coordinates to zones and subzones
+dv_xy2zone              Convert x, y coordinates to zones
+dvlist_summary          Summarize a list of volleyball matches
+find_first_attack       Find first attacks by the receiving team (i.e.
+                        attacks associated with a serve reception)
+find_match              Find a particular match in a list of datavolley
+                        objects
+find_player_name_remapping
+                        Attempt to build a player name remapping table
+find_runs               Generate information about runs of events
+find_serves             Find serves
+findnext                Find each entry in y that follows each entry in
+                        x
+findprev                Find each entry in y that precedes each entry
+                        in x
+fix_ace_evaluations     Find aces that might not be marked as such
+ggcourt                 ggplot volleyball court
+inspect                 Convenience function for inspecting the plays
+                        component of a datavolley object
+play_phase              Figure out the phase of play associated with
+                        each point
+plays                   Extract the plays component from a datavolley
+                        object, or assign a new one
+print.summary.datavolley
+                        Print method for summary.datavolley
+print.summary.datavolleylist
+                        Print method for summary.datavolleylist
+remap_player_info       Change player information
+remap_player_names      Change player names
+remap_team_names        Change team names
+serve_win_points        Find serve win points
+skill_evaluation_decoder
+                        Translate skill evaluation codes into
+                        meaningful summary phrases
+summary.datavolley      A simple summary of a volleyball match
+teams                   Get team names and IDs from datavolley object
