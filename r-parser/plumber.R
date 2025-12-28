@@ -28,65 +28,61 @@ function(req, res) {
      message("postBody is present (binary data hidden)")
   }
 
-  if (is.null(req$FILES)) {
-      message("req$FILES is NULL. Attempting manual parse with mime::parse_multipart...")
+  # Fallback: Check if Plumber put the file content in args (common for text/plain parts)
+  if ((is.null(req$FILES) || is.null(req$FILES$file)) && !is.null(req$args$file)) {
+      message("Fallback: File found in req$args$file")
+      content <- req$args$file
+      temp_f <- tempfile(fileext = ".dvw")
+      
+      tryCatch({
+          if (is.raw(content)) {
+              writeBin(content, temp_f)
+          } else {
+              # Assume character - dvw is text
+              writeLines(as.character(content), temp_f)
+          }
+          message(paste("Saved fallback content to:", temp_f))
+          # Mock req$FILES so the downstream logic works
+          req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded_from_args.dvw"))
+      }, error = function(e) {
+          message(paste("Failed to save fallback content:", e$message))
+      })
+  }
+  
+  # Manual Parse Fallback (Last Resort)
+  if (is.null(req$FILES) || is.null(req$FILES$file)) {
+      message("Attempting manual parse with mime::parse_multipart...")
       tryCatch({
           parsed <- mime::parse_multipart(req)
-          message("Manual parse result keys: ", paste(names(parsed), collapse=", "))
-          
-          # Map parsed result to structure expected by logic
-          # mime::parse_multipart returns list of lists (name, filename, content, etc) OR simple values?
-          # Actually, it usually returns a named list where values are the content (raw or string).
-          # AND attributes like 'filename' are attached.
-          
-          # Let's inspect 'file' from parsed
           if (!is.null(parsed$file)) {
-              # Adapt to Plumber's expected req$FILES structure if possible, 
-              # or just use it directly.
-              # Plumber req$FILES$file is normally a list with 'tempfile_name', 'name', etc.
-              # But datavolley::dv_read takes a path. 
-              # So we must save the content to a temp file.
-              
               temp_f <- tempfile(fileext = ".dvw")
-              writeBin(parsed$file, temp_f)
-              message("Saved manual file to: ", temp_f)
+              # mime::parse_multipart might return a list or raw/char. 
+              # If it's a list, look for 'content' or assume the list *is* the part info?
+              # Debugging show that parsed$file caused writeBin error (vector expected).
+              # It implies parsed$file is a list.
+              part <- parsed$file
               
-              # Mock the structure expected below
-              req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded.dvw"))
+              # If part is a list, try to find content
+              content_to_write <- part
+              if (is.list(part)) {
+                  # Only try to extract if we see a 'content' slot or similar, otherwise rely on args.
+                  # For now, let's just serialize it to text if we can't find raw.
+                  message("Manual parse: 'file' is a list. Keys: ", paste(names(part), collapse=", "))
+                  # Usually 'dat' or 'content' is the binary.
+                  # If we can't find it easily, forego this path since args likely worked.
+              } else {
+                  writeBin(part, temp_f)
+                  req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded_manual.dvw"))
+              }
           }
       }, error = function(e) {
           message("Manual parse failed: ", e$message)
       })
   }
 
-  if (!is.null(req$FILES)) {
-      message("req$FILES found. Keys:")
-      print(names(req$FILES))
-  } else {
-      message("req$FILES is NULL (even after manual parse attempt)")
-      # Fallback: check args
-      if (!is.null(req$args)) {
-          message("req$args keys:")
-          print(names(req$args))
-      }
-  }
-
   if (is.null(req$FILES) || is.null(req$FILES$file)) {
-    # Attempt to find file in args if parser put it there
-    if (!is.null(req$args$file)) {
-        message("File found in req$args!")
-        # It might be in args if it wasn't treated as a file upload but as a form field
-        # But for files, we need the path. 
-        # If it's in args, it might be the content string?
-        res$status <- 400
-        return(list(
-            error = "No file uploaded (checked FILES). Found something in args?", 
-            args_keys = names(req$args)
-        ))
-    }
-    
     res$status <- 400
-    return(list(error = "No file uploaded. Please upload a file with key 'file'.", debug_files = names(req$FILES)))
+    return(list(error = "No file uploaded. Please upload a file with key 'file'.", debug_files = names(req$FILES), args_keys = names(req$args)))
   }
   
   # Get the temporary file path
