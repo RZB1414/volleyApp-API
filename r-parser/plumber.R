@@ -19,18 +19,41 @@ if (file.exists(".env")) {
 #* @parser multi
 #* @serializer json
 function(req, res) {
-  # Check if file was uploaded
+  # Debug Logging
   message("--- Incoming Request ---")
   message(paste("Content-Type:", req$HTTP_CONTENT_TYPE))
   
+  # Try to see if postBody has data
+  if (!is.null(req$postBody)) {
+     message(paste("postBody size:", nchar(req$postBody)))
+  }
+
   if (!is.null(req$FILES)) {
       message("req$FILES found. Keys:")
       print(names(req$FILES))
   } else {
       message("req$FILES is NULL")
+      # Fallback: check args
+      if (!is.null(req$args)) {
+          message("req$args keys:")
+          print(names(req$args))
+      }
   }
 
   if (is.null(req$FILES) || is.null(req$FILES$file)) {
+    # Attempt to find file in args if parser put it there
+    if (!is.null(req$args$file)) {
+        message("File found in req$args!")
+        # It might be in args if it wasn't treated as a file upload but as a form field
+        # But for files, we need the path. 
+        # If it's in args, it might be the content string?
+        res$status <- 400
+        return(list(
+            error = "No file uploaded (checked FILES). Found something in args?", 
+            args_keys = names(req$args)
+        ))
+    }
+    
     res$status <- 400
     return(list(error = "No file uploaded. Please upload a file with key 'file'.", debug_files = names(req$FILES)))
   }
