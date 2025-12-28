@@ -16,27 +16,34 @@ const processSchema = z.object({
 dvwRouter.post('/process', requireAuth, async (c) => {
     try {
         const formData = await c.req.parseBody();
-        const file = formData['file']; // Assuming the field name is 'file'
-
+        const file = formData['file'];
         if (!file || !(file instanceof File)) {
             return c.json({ message: 'File is required' }, 400);
         }
-
         if (!c.env.R_PARSER_URL) {
             return c.json({ message: 'R_PARSER_URL not configured' }, 500);
         }
-
-        // 1. Send to R Parser Service
+        // Sanitize filename
+        const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        console.log(`Sending file to R: ${safeFilename} (Size: ${file.size} bytes)`);
+        // --- KEY FIX: Use standard File object if possible, or ensure Blob has name ---
         const rFormData = new FormData();
-        rFormData.append('file', file);
 
-        console.log(`Sending file ${file.name} to R Parser at ${c.env.R_PARSER_URL}`);
+        // Read file content
+        const fileContent = await file.arrayBuffer();
 
+        // Create a File-like object (or Blob with filename in append)
+        // Note: In some environments 'File' constructor is preferred over 'Blob' for multipart
+        const fileBlob = new Blob([fileContent], { type: file.type || 'application/octet-stream' });
+
+        // Critical: Append with filename to ensure Content-Disposition header is set correctly
+        rFormData.append('file', fileBlob, safeFilename);
+        console.log(`Posting to ${c.env.R_PARSER_URL}...`);
         const rResponse = await fetch(c.env.R_PARSER_URL, {
             method: 'POST',
-            body: rFormData
+            body: rFormData,
+            // DO NOT set Content-Type header manually here; fetch will generate the boundary
         });
-
         if (!rResponse.ok) {
             const errText = await rResponse.text();
             console.error('R Parser Error:', errText);

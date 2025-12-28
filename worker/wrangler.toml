@@ -17,3 +17,4 @@ preview_bucket_name = "volleyplus-data-dev"
 
 [vars]
 LOG_AUTH_FINGERPRINT = "true"
+R_PARSER_URL = "https://volleyapp-api-production.up.railway.app/parse"

@@ -52,22 +52,40 @@ const token = signJwt({
     exp: Math.floor(Date.now() / 1000) + 3600
 }, jwtSecret);
 
-console.log('Generated Token (truncated):', token.substring(0, 20) + '...');
-
 // 4. Call API
 async function runTest() {
-    // Check if running local or we want to point to remote
-    // Default to local dev port
-    const url = 'http://127.0.0.1:8787/dvw/process';
-    console.log(`Testing POST ${url} ...`);
+    const url = 'http://127.0.0.1:3000/dvw/process';
+    const filePath = path.join(__dirname, 'sample.dvw');
+
+    if (!fs.existsSync(filePath)) {
+        console.error('sample.dvw not found! Please ensure it exists to run this test.');
+        return;
+    }
+
+    console.log(`Testing POST ${url} with file ${filePath} ...`);
+
     try {
+        const fileContent = fs.readFileSync(filePath);
+        const boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'; // Custom boundary
+
+        // Manual multipart/form-data construction (node built-in fetch can be tricky with FormData without helpers)
+        // Header
+        const pre = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="sample.dvw"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+        const post = `\r\n--${boundary}--\r\n`;
+
+        const body = Buffer.concat([
+            Buffer.from(pre),
+            fileContent,
+            Buffer.from(post)
+        ]);
+
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ filename: 'sample.json' })
+            body: body
         });
 
         console.log('Status:', response.status);
@@ -75,7 +93,7 @@ async function runTest() {
         console.log('Body:', text);
 
         if (response.ok) {
-            console.log('SUCCESS: API processed the file.');
+            console.log('SUCCESS: API processed the file via Railway + Cloudflare.');
         } else {
             console.error('FAILURE: API returned error.');
         }
