@@ -23,16 +23,47 @@ function(req, res) {
   message("--- Incoming Request ---")
   message(paste("Content-Type:", req$HTTP_CONTENT_TYPE))
   
-  # Try to see if postBody has data
+  # Try to see if postBody has data (careful with binary data logging)
   if (!is.null(req$postBody)) {
-     message(paste("postBody size:", nchar(req$postBody)))
+     message("postBody is present (binary data hidden)")
+  }
+
+  if (is.null(req$FILES)) {
+      message("req$FILES is NULL. Attempting manual parse with mime::parse_multipart...")
+      tryCatch({
+          parsed <- mime::parse_multipart(req)
+          message("Manual parse result keys: ", paste(names(parsed), collapse=", "))
+          
+          # Map parsed result to structure expected by logic
+          # mime::parse_multipart returns list of lists (name, filename, content, etc) OR simple values?
+          # Actually, it usually returns a named list where values are the content (raw or string).
+          # AND attributes like 'filename' are attached.
+          
+          # Let's inspect 'file' from parsed
+          if (!is.null(parsed$file)) {
+              # Adapt to Plumber's expected req$FILES structure if possible, 
+              # or just use it directly.
+              # Plumber req$FILES$file is normally a list with 'tempfile_name', 'name', etc.
+              # But datavolley::dv_read takes a path. 
+              # So we must save the content to a temp file.
+              
+              temp_f <- tempfile(fileext = ".dvw")
+              writeBin(parsed$file, temp_f)
+              message("Saved manual file to: ", temp_f)
+              
+              # Mock the structure expected below
+              req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded.dvw"))
+          }
+      }, error = function(e) {
+          message("Manual parse failed: ", e$message)
+      })
   }
 
   if (!is.null(req$FILES)) {
       message("req$FILES found. Keys:")
       print(names(req$FILES))
   } else {
-      message("req$FILES is NULL")
+      message("req$FILES is NULL (even after manual parse attempt)")
       # Fallback: check args
       if (!is.null(req$args)) {
           message("req$args keys:")
