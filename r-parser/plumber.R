@@ -19,9 +19,19 @@ if (file.exists(".env")) {
 #* @serializer json
 function(req, res) {
   # Check if file was uploaded
+  message("--- Incoming Request ---")
+  message(paste("Content-Type:", req$HTTP_CONTENT_TYPE))
+  
+  if (!is.null(req$FILES)) {
+      message("req$FILES found. Keys:")
+      print(names(req$FILES))
+  } else {
+      message("req$FILES is NULL")
+  }
+
   if (is.null(req$FILES) || is.null(req$FILES$file)) {
     res$status <- 400
-    return(list(error = "No file uploaded. Please upload a file with key 'file'."))
+    return(list(error = "No file uploaded. Please upload a file with key 'file'.", debug_files = names(req$FILES)))
   }
   
   # Get the temporary file path
