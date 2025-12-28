@@ -34,7 +34,7 @@ dvwRouter.post('/process', requireAuth, async (c) => {
 
         // Create a File-like object (or Blob with filename in append)
         // Note: In some environments 'File' constructor is preferred over 'Blob' for multipart
-        const fileBlob = new Blob([fileContent], { type: file.type || 'application/octet-stream' });
+        const fileBlob = new Blob([fileContent], { type: 'text/plain' });
 
         // Critical: Append with filename to ensure Content-Disposition header is set correctly
         rFormData.append('file', fileBlob, safeFilename);
