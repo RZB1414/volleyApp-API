@@ -16,6 +16,7 @@ if (file.exists(".env")) {
 #* Parse a DVW file and return JSON
 #* @param req The request object
 #* @post /parse
+#* @parser multi
 #* @serializer json
 function(req, res) {
   # Check if file was uploaded
