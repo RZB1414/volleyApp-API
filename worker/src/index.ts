@@ -19,6 +19,8 @@ const allowedOrigins = [
 
 app.use('*', cors({
 	origin: (origin) => {
+		// Allow any localhost for dev
+		if (origin && origin.includes('localhost')) return origin;
 		if (!origin) {
 			return allowedOrigins[0];
 		}
