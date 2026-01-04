@@ -31,6 +31,40 @@ tryCatch({
   # handling encoding issues common in DVW files
   dvw_data <- dv_read(input_path, encoding = "windows-1252", insert_technical_timeouts = FALSE)
   
+  # Infer coordinates from zones if they are missing
+  # detailed coordinates (x,y) might be NA if not clicked, but zones usually exist.
+  # We use dv_xy to populate them for 'lower' court (standard view) if missing.
+  
+  if (all(is.na(dvw_data$plays$start_coordinate_x)) || all(is.null(dvw_data$plays$start_coordinate_x))) {
+      message("Coordinates missing. Inferring start coordinates from zones...")
+      start_coords <- dv_xy(dvw_data$plays$start_zone, end = "lower")
+      dvw_data$plays$start_coordinate_x <- start_coords$x
+      dvw_data$plays$start_coordinate_y <- start_coords$y
+  } else {
+      # Patch individual NAs if some are present but others missing? 
+      # For now, let's just patch NAs.
+      missing_start <- is.na(dvw_data$plays$start_coordinate_x) & !is.na(dvw_data$plays$start_zone)
+      if (any(missing_start)) {
+          patched_start <- dv_xy(dvw_data$plays$start_zone[missing_start], end = "lower")
+          dvw_data$plays$start_coordinate_x[missing_start] <- patched_start$x
+          dvw_data$plays$start_coordinate_y[missing_start] <- patched_start$y
+      }
+  }
+
+  if (all(is.na(dvw_data$plays$end_coordinate_x)) || all(is.null(dvw_data$plays$end_coordinate_x))) {
+       message("End coordinates missing. Inferring from zones...")
+       end_coords <- dv_xy(dvw_data$plays$end_zone, end = "lower")
+       dvw_data$plays$end_coordinate_x <- end_coords$x
+       dvw_data$plays$end_coordinate_y <- end_coords$y
+  } else {
+      missing_end <- is.na(dvw_data$plays$end_coordinate_x) & !is.na(dvw_data$plays$end_zone)
+      if (any(missing_end)) {
+          patched_end <- dv_xy(dvw_data$plays$end_zone[missing_end], end = "lower")
+          dvw_data$plays$end_coordinate_x[missing_end] <- patched_end$x
+          dvw_data$plays$end_coordinate_y[missing_end] <- patched_end$y
+      }
+  }
+
   # Convert to standard list/JSON structure
   # We serialize the entire object. 
   # You might want to filter specific fields later if too large, 
@@ -45,7 +79,7 @@ tryCatch({
   # --- Upload to Cloudflare R2 ---
   
   # Try to load secrets from worker/.dev.vars if variables not set
-  if (Sys.getenv("R2_ACCESS_KEY_ID") == "") {
+  if (Sys.getenv("R2_ACCESS_KEY_ID") == "" && Sys.getenv("SKIP_UPLOAD") == "") {
       vars_path <- file.path(getwd(), "worker", ".dev.vars")
       if (file.exists(vars_path)) {
           message("Loading environment variables from worker/.dev.vars")

@@ -1,0 +1,13 @@
+{
+    "name": "volley-plus-root",
+    "version": "1.0.0",
+    "description": "Root for Volley Plus project",
+    "scripts": {
+        "watch": "node watch_dvw.js"
+    },
+    "dependencies": {
+        "chokidar": "^3.5.3",
+        "node-fetch": "^3.3.2",
+        "form-data": "^4.0.0"
+    }
+}

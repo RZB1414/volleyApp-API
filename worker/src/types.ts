@@ -54,6 +54,7 @@ export type AppBindings = {
   VOLLEY_DATA: R2Bucket;
   JWT_SECRET: string;
   R_PARSER_URL: string;
+  LOCAL_DEV_KEY?: string;
   LOG_AUTH_FINGERPRINT?: string;
 };
 

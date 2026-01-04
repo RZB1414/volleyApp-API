@@ -3,11 +3,119 @@ library(plumber)
 library(jsonlite)
 library(datavolley)
 library(aws.s3)
+library(dplyr)
 library(dotenv)
 
 # Load environment variables if they exist
 if (file.exists(".env")) {
   dotenv::load_dot_env(".env")
+}
+
+# Helper: Extract file from request (handle multipart and fallbacks)
+get_file_from_req <- function(req) {
+  message("--- Debug: get_file_from_req ---")
+  message("Names in req$FILES: ", paste(names(req$FILES), collapse=", "))
+  message("Names in req$args: ", paste(names(req$args), collapse=", "))
+
+  # 1. Check if file is in req$FILES (standard plumber multipart)
+  if (!is.null(req$FILES) && !is.null(req$FILES$file)) {
+    return(req$FILES$file)
+  }
+
+  # 2. Check req$args (fallback for text/plain uploads)
+  if (!is.null(req$args$file)) {
+      message("Fallback: File found in req$args$file")
+      
+      message("Structure of args$file:")
+      message(paste(capture.output(str(req$args$file)), collapse = "\n"))
+
+      content <- req$args$file
+      
+      # Handle list wrapping (often happens with plumber and text/plain fallback)
+      if (is.list(content)) {
+          message("Debug: Content is a list. Extracting first element.")
+          content <- content[[1]]
+      }
+
+      # Debug content type details (post-unwrap)
+      message("Content Class (Unwrapped): ", class(content))
+      message("Content Length (Unwrapped): ", length(content))
+      if (is.character(content)) {
+          message("First 100 chars: ", substr(content[1], 1, 100))
+      }
+      
+      temp_f <- tempfile(fileext = ".dvw")
+      
+      tryCatch({
+          if (is.raw(content)) {
+              writeBin(content, temp_f)
+          } else {
+              # Force binary write to avoid Windows CRLF issues
+              # NOTE: if content is a vector of lines, paste them first?
+              # DVW files are usually one big string when via HTTP text/plain, but let's check.
+              text_content <- as.character(content)
+              if (length(text_content) > 1) {
+                  message("Warning: Content is a vector of length ", length(text_content), ". Collapsing with newlines.")
+                  text_content <- paste(text_content, collapse = "\n")
+              }
+              writeBin(charToRaw(text_content), temp_f)
+          }
+          
+          # Debug: Read back first line of saved file
+          first_line <- readLines(temp_f, n = 1, warn = FALSE)
+          message("Saved File First Line: ", first_line)
+
+          return(list(tempfile_name = temp_f, name = "uploaded_from_args.dvw"))
+      }, error = function(e) {
+          message(paste("Failed to save fallback content:", e$message))
+          return(NULL)
+      })
+  }
+
+  # 3. Manual Parse Fallback (Last Resort)
+  message("Attempting manual parse with mime::parse_multipart...")
+  tryCatch({
+      parsed <- mime::parse_multipart(req)
+      if (!is.null(parsed$file)) {
+          temp_f <- tempfile(fileext = ".dvw")
+          part <- parsed$file
+          
+          if (is.list(part)) {
+              message("Manual parse: 'file' is a list. Skipping manual save.")
+          } else {
+              writeBin(part, temp_f)
+              return(list(tempfile_name = temp_f, name = "uploaded_manual.dvw"))
+          }
+      }
+  }, error = function(e) {
+      message("Manual parse failed: ", e$message)
+  })
+
+  return(NULL)
+}
+
+extract_player_actions <- function(dv, target_team, target_number) {
+    message("--- Debug: extract_player_actions ---")
+    message("Target Team: ", target_team)
+    message("Target Number: ", target_number)
+    
+    # Ensure number is numeric
+    target_number <- as.numeric(target_number)
+    
+    # Use base R subsetting for robustness
+    plays <- dv$plays
+    
+    # Filter
+    subset_plays <- plays[which(plays$team == target_team & plays$player_number == target_number), ]
+    
+    # Sort (if rally_number exists, otherwise just by time or maintain order)
+    if ("rally_number" %in% names(subset_plays)) {
+        subset_plays <- subset_plays[order(subset_plays$set_number, subset_plays$rally_number), ]
+    } else {
+         subset_plays <- subset_plays[order(subset_plays$set_number), ]
+    }
+    
+    return(subset_plays)
 }
 
 #* @apiTitle DVW Parser API
@@ -20,74 +128,19 @@ if (file.exists(".env")) {
 #* @serializer json
 function(req, res) {
   # Debug Logging
-  message("--- Incoming Request ---")
+  message("--- Incoming Request (/parse) ---")
   message(paste("Content-Type:", req$HTTP_CONTENT_TYPE))
   
-  # Try to see if postBody has data (careful with binary data logging)
-  if (!is.null(req$postBody)) {
-     message("postBody is present (binary data hidden)")
-  }
+  file_info <- get_file_from_req(req)
 
-  # Fallback: Check if Plumber put the file content in args (common for text/plain parts)
-  if ((is.null(req$FILES) || is.null(req$FILES$file)) && !is.null(req$args$file)) {
-      message("Fallback: File found in req$args$file")
-      content <- req$args$file
-      temp_f <- tempfile(fileext = ".dvw")
-      
-      tryCatch({
-          if (is.raw(content)) {
-              writeBin(content, temp_f)
-          } else {
-              # Assume character - dvw is text
-              writeLines(as.character(content), temp_f)
-          }
-          message(paste("Saved fallback content to:", temp_f))
-          # Mock req$FILES so the downstream logic works
-          req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded_from_args.dvw"))
-      }, error = function(e) {
-          message(paste("Failed to save fallback content:", e$message))
-      })
-  }
-  
-  # Manual Parse Fallback (Last Resort)
-  if (is.null(req$FILES) || is.null(req$FILES$file)) {
-      message("Attempting manual parse with mime::parse_multipart...")
-      tryCatch({
-          parsed <- mime::parse_multipart(req)
-          if (!is.null(parsed$file)) {
-              temp_f <- tempfile(fileext = ".dvw")
-              # mime::parse_multipart might return a list or raw/char. 
-              # If it's a list, look for 'content' or assume the list *is* the part info?
-              # Debugging show that parsed$file caused writeBin error (vector expected).
-              # It implies parsed$file is a list.
-              part <- parsed$file
-              
-              # If part is a list, try to find content
-              content_to_write <- part
-              if (is.list(part)) {
-                  # Only try to extract if we see a 'content' slot or similar, otherwise rely on args.
-                  # For now, let's just serialize it to text if we can't find raw.
-                  message("Manual parse: 'file' is a list. Keys: ", paste(names(part), collapse=", "))
-                  # Usually 'dat' or 'content' is the binary.
-                  # If we can't find it easily, forego this path since args likely worked.
-              } else {
-                  writeBin(part, temp_f)
-                  req$FILES <- list(file = list(tempfile_name = temp_f, name = "uploaded_manual.dvw"))
-              }
-          }
-      }, error = function(e) {
-          message("Manual parse failed: ", e$message)
-      })
-  }
-
-  if (is.null(req$FILES) || is.null(req$FILES$file)) {
+  if (is.null(file_info)) {
     res$status <- 400
     return(list(error = "No file uploaded. Please upload a file with key 'file'.", debug_files = names(req$FILES), args_keys = names(req$args)))
   }
   
   # Get the temporary file path
-  temp_file <- req$FILES$file$tempfile_name
-  original_name <- req$FILES$file$name
+  temp_file <- file_info$tempfile_name
+  original_name <- file_info$name
   
   message(paste("Received file:", original_name))
   
@@ -142,5 +195,171 @@ function(req, res) {
   }, error = function(e) {
     res$status <- 500
     return(list(error = paste("Failed to parse DVW file:", e$message)))
+  })
+}
+
+#* Extract all raw plays from a DVW file (Base64 JSON)
+#* @param req The request object
+#* @post /raw-plays
+#* @serializer json
+function(req, res) {
+  message("--- Incoming Request (/raw-plays) [JSON] ---")
+  
+  tryCatch({
+      # Parse JSON body directly
+      body_data <- jsonlite::fromJSON(req$postBody)
+      
+      file_content_b64 <- body_data$file_content
+      filename <- body_data$filename
+      
+      if (is.null(file_content_b64)) {
+          res$status <- 400
+          return(list(error = "Missing required field: file_content"))
+      }
+
+      # Decode Base64 to temp file
+      temp_f <- tempfile(fileext = ".dvw")
+      raw_content <- jsonlite::base64_dec(file_content_b64)
+      writeBin(raw_content, temp_f)
+      
+      message("Saved decoded file to: ", temp_f)
+
+      # Process
+      dvw_data <- dv_read(temp_f, encoding = "windows-1252", insert_technical_timeouts = FALSE)
+      
+      # Return all plays without filtering
+      return(dvw_data$plays)
+
+  }, error = function(e) {
+      message("Error handling request: ", e$message)
+      res$status <- 500
+      return(list(error = paste("Processing failed:", e$message)))
+  })
+}
+
+#* Extract meta data from a DVW file (Base64 JSON)
+#* @param req The request object
+#* @post /meta
+#* @serializer json
+function(req, res) {
+  message("--- Incoming Request (/meta) [JSON] ---")
+  
+  tryCatch({
+      body_data <- jsonlite::fromJSON(req$postBody)
+      file_content_b64 <- body_data$file_content
+      
+      if (is.null(file_content_b64)) {
+          res$status <- 400
+          return(list(error = "Missing required field: file_content"))
+      }
+
+      temp_f <- tempfile(fileext = ".dvw")
+      raw_content <- jsonlite::base64_dec(file_content_b64)
+      writeBin(raw_content, temp_f)
+      
+      message("Saved decoded file to: ", temp_f)
+
+      dvw_data <- dv_read(temp_f, encoding = "windows-1252", insert_technical_timeouts = FALSE)
+      
+      return(dvw_data$meta)
+
+  }, error = function(e) {
+      message("Error handling request: ", e$message)
+      res$status <- 500
+      return(list(error = paste("Processing failed:", e$message)))
+  })
+}
+
+#* Extract filtered meta data from a DVW file (Base64 JSON)
+#* Returns specific fields: match (date, season, league, phase), result, teams, teams, players_h, players_v
+#* @param req The request object
+#* @post /meta/filtered
+#* @serializer json
+function(req, res) {
+  message("--- Incoming Request (/meta/filtered) [JSON] ---")
+  
+  tryCatch({
+      body_data <- jsonlite::fromJSON(req$postBody)
+      file_content_b64 <- body_data$file_content
+      
+      if (is.null(file_content_b64)) {
+          res$status <- 400
+          return(list(error = "Missing required field: file_content"))
+      }
+
+      temp_f <- tempfile(fileext = ".dvw")
+      raw_content <- jsonlite::base64_dec(file_content_b64)
+      writeBin(raw_content, temp_f)
+      
+      message("Saved decoded file to: ", temp_f)
+
+      dvw_data <- dv_read(temp_f, encoding = "windows-1252", insert_technical_timeouts = FALSE)
+      
+      meta <- dvw_data$meta
+      
+      # Construct filtered response
+      response <- list(
+          match = list(
+              date = meta$match$date,
+              season = meta$match$season,
+              league = meta$match$league,
+              phase = meta$match$phase
+          ),
+          result = meta$result,
+          teams = meta$teams,
+          players_h = meta$players_h,
+          players_v = meta$players_v
+      )
+      
+      return(response)
+
+  }, error = function(e) {
+      message("Error handling request: ", e$message)
+      res$status <- 500
+      return(list(error = paste("Processing failed:", e$message)))
+  })
+}
+
+
+
+#* Extract actions for a specific player (Base64 JSON)
+#* @param req The request object
+#* @post /player-actions
+#* @serializer json
+function(req, res) {
+  message("--- Incoming Request (/player-actions) [JSON] ---")
+  
+  tryCatch({
+      # Parse JSON body directly
+      body_data <- jsonlite::fromJSON(req$postBody)
+      
+      file_content_b64 <- body_data$file_content
+      filename <- body_data$filename
+      team <- body_data$team
+      number <- body_data$number
+      
+      if (is.null(file_content_b64) || is.null(team) || is.null(number)) {
+          res$status <- 400
+          return(list(error = "Missing required fields: file_content, team, or number"))
+      }
+
+      # Decode Base64 to temp file
+      temp_f <- tempfile(fileext = ".dvw")
+      # helper to decode base64 string to raw vector
+      raw_content <- jsonlite::base64_dec(file_content_b64)
+      writeBin(raw_content, temp_f)
+      
+      message("Saved decoded file to: ", temp_f)
+
+      # Process
+      dvw_data <- dv_read(temp_f, encoding = "windows-1252", insert_technical_timeouts = FALSE)
+      actions <- extract_player_actions(dvw_data, team, number)
+      
+      return(actions)
+
+  }, error = function(e) {
+      message("Error handling request: ", e$message)
+      res$status <- 500
+      return(list(error = paste("Processing failed:", e$message)))
   })
 }

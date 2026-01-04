@@ -1,83 +1,228 @@
 import { Hono, type Context } from 'hono';
-import { z } from 'zod';
 import type { AppEnv } from '../types';
-import { requireAuth } from '../middleware/auth';
-import { transformDvwToMatchReport } from '../services/dvwTransform';
-import { insertMatchReport } from '../services/matchReport.service';
+import { requireAuth } from '../middleware/auth'; //ainda nao usadooo!!!!
 
 const dvwRouter = new Hono<AppEnv>();
 
-const processSchema = z.object({
-    filename: z.string().min(1, "Filename is required"),
-    matchId: z.string().uuid().optional() // Optional override
-});
+// Helper to decompress and read file from R2
+async function getDecompressedFileContent(c: Context<AppEnv>, fileKey: string): Promise<string> {
+    const object = await c.env.VOLLEY_DATA.get(fileKey);
+    if (!object || !object.body) {
+        throw new Error('File not found or empty');
+    }
 
-// Upload and Process DVW file
-dvwRouter.post('/process', requireAuth, async (c) => {
+    const decompressionStream = new DecompressionStream('gzip');
+    // Cast to any to avoid strict type mismatch between ReadableStream<Uint8Array> and WritableStream<BufferSource>
+    const decompressedStream = object.body.pipeThrough(decompressionStream as any);
+    const fileBuffer = await new Response(decompressedStream).arrayBuffer();
+    return btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+}
+
+// Upload DVW file (Compress and Save to R2)
+dvwRouter.post('/upload', async (c) => {
     try {
         const formData = await c.req.parseBody();
         const file = formData['file'];
+
         if (!file || !(file instanceof File)) {
             return c.json({ message: 'File is required' }, 400);
+        }
+
+        const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileKey = `raw/${safeFilename}`;
+
+        // Compress stream
+        const compressionStream = new CompressionStream('gzip');
+        const compressedStream = file.stream().pipeThrough(compressionStream);
+
+        // Buffer the compressed content to get a known length for R2 upload
+        const compressedBuffer = await new Response(compressedStream).arrayBuffer();
+
+        await c.env.VOLLEY_DATA.put(fileKey, compressedBuffer, {
+            httpMetadata: {
+                contentType: 'application/octet-stream', // Compressed binary
+                contentEncoding: 'gzip'
+            },
+            customMetadata: {
+                originalName: file.name
+            }
+        });
+
+        return c.json({
+            message: 'File uploaded and compressed successfully',
+            fileKey: fileKey
+        });
+
+    } catch (error) {
+        console.error('Upload Error:', error);
+        return c.json({ message: 'Internal Upload Error', error: String(error) }, 500);
+    }
+});
+
+// Proxy to R service for Player Actions (Reads from R2)
+dvwRouter.post('/player-actions', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { fileKey, team, number } = body;
+
+        if (!fileKey || !team || !number) {
+            return c.json({ message: 'fileKey, team, and number are required' }, 400);
         }
         if (!c.env.R_PARSER_URL) {
             return c.json({ message: 'R_PARSER_URL not configured' }, 500);
         }
-        // Sanitize filename
-        const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        console.log(`Sending file to R: ${safeFilename} (Size: ${file.size} bytes)`);
-        // --- KEY FIX: Use standard File object if possible, or ensure Blob has name ---
-        const rFormData = new FormData();
 
-        // Read file content
-        const fileContent = await file.arrayBuffer();
+        const base64Content = await getDecompressedFileContent(c, fileKey);
 
-        // Create a File-like object (or Blob with filename in append)
-        // Note: In some environments 'File' constructor is preferred over 'Blob' for multipart
-        const fileBlob = new Blob([fileContent], { type: 'text/plain' });
+        const payload = {
+            filename: fileKey.split('/').pop() || 'file.dvw',
+            file_content: base64Content,
+            team: team,
+            number: number
+        };
 
-        // Critical: Append with filename to ensure Content-Disposition header is set correctly
-        rFormData.append('file', fileBlob, safeFilename);
-        console.log(`Posting to ${c.env.R_PARSER_URL}...`);
-        const rResponse = await fetch(c.env.R_PARSER_URL, {
+        const rResponse = await fetch(`${c.env.R_PARSER_URL}/player-actions`, {
             method: 'POST',
-            body: rFormData,
-            // DO NOT set Content-Type header manually here; fetch will generate the boundary
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
         });
+
         if (!rResponse.ok) {
             const errText = await rResponse.text();
-            console.error('R Parser Error:', errText);
-            return c.json({ message: 'Failed to parse file via R service', details: errText }, 502);
+            return c.json({ message: 'Failed to extract actions from R service', details: errText }, 502);
         }
 
-        const rawData = await rResponse.json();
-
-        // 2. Transform / Normalize
-        const matchReport = transformDvwToMatchReport(rawData);
-
-        // 3. Save Processed JSON to R2
-        const r2 = c.env.VOLLEY_DATA;
-        const processedFilename = file.name.replace(/\.dvw$/i, '') + '_processed.json';
-
-        // Also save the Raw JSON for debugging/backup if desired
-        const rawFilename = file.name.replace(/\.dvw$/i, '') + '_raw.json';
-        await r2.put(`raw/${rawFilename}`, JSON.stringify(rawData), {
-            httpMetadata: { contentType: 'application/json' }
-        });
-
-        await r2.put(`processed/${processedFilename}`, JSON.stringify(matchReport), {
-            httpMetadata: { contentType: 'application/json' }
-        });
-
-        return c.json({
-            message: 'Processed successfully',
-            processedFile: processedFilename,
-            report: matchReport
-        });
+        const actions = await rResponse.json();
+        return c.json(actions);
 
     } catch (error) {
-        console.error('Processing error:', error);
-        return c.json({ message: 'Internal Processing Error', error: String(error) }, 500);
+        console.error('Player Actions Proxy Error:', error);
+        return c.json({ message: 'Internal Proxy Error', error: String(error) }, 500);
+    }
+});
+
+dvwRouter.post('/raw-plays', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { fileKey } = body;
+
+        if (!fileKey) {
+            return c.json({ message: 'fileKey is required' }, 400);
+        }
+        if (!c.env.R_PARSER_URL) {
+            return c.json({ message: 'R_PARSER_URL not configured' }, 500);
+        }
+
+        const base64Content = await getDecompressedFileContent(c, fileKey);
+
+        const payload = {
+            filename: fileKey.split('/').pop() || 'file.dvw',
+            file_content: base64Content
+        };
+
+        const rResponse = await fetch(`${c.env.R_PARSER_URL}/raw-plays`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!rResponse.ok) {
+            const errText = await rResponse.text();
+            return c.json({ message: 'Failed to extract raw plays from R service', details: errText }, 502);
+        }
+
+        const plays = await rResponse.json();
+        return c.json(plays);
+
+    } catch (error) {
+        console.error('Raw Plays Proxy Error:', error);
+        return c.json({ message: 'Internal Proxy Error', error: String(error) }, 500);
+    }
+});
+
+dvwRouter.post('/meta', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { fileKey } = body;
+
+        if (!fileKey) {
+            return c.json({ message: 'fileKey is required' }, 400);
+        }
+        if (!c.env.R_PARSER_URL) {
+            return c.json({ message: 'R_PARSER_URL not configured' }, 500);
+        }
+
+        const base64Content = await getDecompressedFileContent(c, fileKey);
+
+        const payload = {
+            filename: fileKey.split('/').pop() || 'file.dvw',
+            file_content: base64Content
+        };
+
+        const rResponse = await fetch(`${c.env.R_PARSER_URL}/meta`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!rResponse.ok) {
+            const errText = await rResponse.text();
+            return c.json({ message: 'Failed to extract meta data from R service', details: errText }, 502);
+        }
+
+        const meta = await rResponse.json();
+        return c.json(meta);
+
+    } catch (error) {
+        console.error('Meta Proxy Error:', error);
+        return c.json({ message: 'Internal Proxy Error', error: String(error) }, 500);
+    }
+});
+
+dvwRouter.post('/meta/filtered', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { fileKey } = body;
+
+        if (!fileKey) {
+            return c.json({ message: 'fileKey is required' }, 400);
+        }
+        if (!c.env.R_PARSER_URL) {
+            return c.json({ message: 'R_PARSER_URL not configured' }, 500);
+        }
+
+        const base64Content = await getDecompressedFileContent(c, fileKey);
+
+        const payload = {
+            filename: fileKey.split('/').pop() || 'file.dvw',
+            file_content: base64Content
+        };
+
+        const rResponse = await fetch(`${c.env.R_PARSER_URL}/meta/filtered`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!rResponse.ok) {
+            const errText = await rResponse.text();
+            return c.json({ message: 'Failed to extract filtered meta data from R service', details: errText }, 502);
+        }
+
+        const meta = await rResponse.json();
+        return c.json(meta);
+
+    } catch (error) {
+        console.error('Filtered Meta Proxy Error:', error);
+        return c.json({ message: 'Internal Proxy Error', error: String(error) }, 500);
     }
 });
 

@@ -8,22 +8,62 @@ const MATCH_REPORT_INDEX_PREFIX = 'matchReports/by-match-id';
 const MATCH_REPORT_SIGNATURE_PREFIX = 'matchReports/by-signature';
 const MAX_TIMESTAMP = 9999999999999;
 
+export type Coordinate = {
+  x: number | null;
+  y: number | null;
+};
+
+export type Action = {
+  action_id: string; // unique ID for the action (uuid or index-based)
+  set: number;
+  rally: number; // calculated if possible, or just sequential index
+  timestamp: string; // "YYYY-MM-DD HH:MM:SS"
+  video_file_number?: number;
+  video_time?: number;
+  fundamental: string; // "attack" | "serve" | "reception" | "set" | "block" | "defense" | "error" | "freeball"
+  subtype: string; // "Hard spike", "Float serve", etc.
+  start_zone: number | null;
+  start_coordinates: Coordinate;
+  end_zone: number | null;
+  end_coordinates: Coordinate;
+  trajectory: string | null;
+  block_touches: number | null; // e.g. 0, 1, 2, 3
+  block_contact: string | null; // "None", "Touch", etc.
+  quality: string; // "Perfect", "Positive", "Error", etc.
+  result: string; // "point" | "continuation" | "error" | "defended"
+  score_home_at_action?: number;
+  score_visiting_at_action?: number;
+  notes: string;
+};
+
+export type Player = {
+  player_id: string;
+  name: string;
+  number: number;
+  position: string; // "outside", "middle", "setter", "opposite", "libero"
+  actions: Action[];
+};
+
+export type Team = {
+  team_name: string;
+  team_id?: string;
+  coach?: string;
+  players: Player[];
+};
+
 type StoredMatchReport = {
   id: string;
   matchId: string;
   generatedAt: string;
   matchDate: string | null;
   matchTime: string | null;
-  setColumns: number;
-  columnLabels: string[];
-  teams: Array<{
-    team: string;
-    players: Array<{
-      number: number;
-      name: string;
-      stats: Record<string, string>;
-    }>;
-  }>;
+  competition?: string;
+  venue?: string;
+  sets?: number;
+  teams: {
+    home: Team;
+    away: Team;
+  };
   createdAt: string;
   ownerId: string;
 };
@@ -74,24 +114,6 @@ function normalizeOwnerId(ownerId: unknown) {
   return normalized.length === 0 ? null : normalized;
 }
 
-function normalizeStats(stats: Record<string, unknown>) {
-  return Object.entries(stats).reduce<Record<string, string>>((acc, [key, value]) => {
-    acc[key] = value === undefined || value === null ? '' : String(value);
-    return acc;
-  }, {});
-}
-
-function normalizeTeams(teams: Array<{ team: string; players: Array<Record<string, unknown>> }>) {
-  return teams.map((team) => ({
-    team: team.team,
-    players: team.players.map((player) => ({
-      number: Number(player.number),
-      name: String(player.name),
-      stats: normalizeStats((player.stats ?? {}) as Record<string, unknown>)
-    }))
-  }));
-}
-
 function normalizeSignatureTeamName(name: string | undefined) {
   if (!name) {
     return null;
@@ -101,14 +123,14 @@ function normalizeSignatureTeamName(name: string | undefined) {
   return trimmed.length === 0 ? null : trimmed.toLowerCase();
 }
 
-function buildMatchSignature(matchDate: unknown, teams: Array<{ team: string }>) {
+function buildMatchSignature(matchDate: unknown, teams: { home: { team_name: string }; away: { team_name: string } }) {
   const normalizedDate = normalizeMatchDate(matchDate)?.toISOString()?.slice(0, 10);
   if (!normalizedDate) {
     return null;
   }
 
-  const normalizedTeamNames = (teams ?? [])
-    .map((team) => normalizeSignatureTeamName(team.team))
+  const normalizedTeamNames = [teams.home.team_name, teams.away.team_name]
+    .map((name) => normalizeSignatureTeamName(name))
     .filter((value): value is string => Boolean(value))
     .sort();
 
@@ -140,8 +162,9 @@ function mapMatchReport(doc: StoredMatchReport | null): MatchReport | null {
     generatedAt: parseStoredDate(doc.generatedAt),
     matchDate: parseStoredDate(doc.matchDate),
     matchTime: doc.matchTime ?? null,
-    setColumns: doc.setColumns,
-    columnLabels: doc.columnLabels,
+    competition: doc.competition,
+    venue: doc.venue,
+    sets: doc.sets,
     teams: doc.teams,
     createdAt: parseStoredDate(doc.createdAt),
     ownerId: doc.ownerId
@@ -154,9 +177,13 @@ export async function insertMatchReport(
     generatedAt: string;
     matchDate?: string | null;
     matchTime?: string | null;
-    setColumns: number;
-    columnLabels: string[];
-    teams: Array<{ team: string; players: Array<Record<string, unknown>> }>;
+    competition?: string;
+    venue?: string;
+    sets?: number;
+    teams: {
+      home: Team;
+      away: Team;
+    };
   },
   { ownerId }: { ownerId: string }
 ) {
@@ -178,9 +205,10 @@ export async function insertMatchReport(
     generatedAt: new Date(payload.generatedAt).toISOString(),
     matchDate: normalizeMatchDate(payload.matchDate)?.toISOString() ?? null,
     matchTime: payload.matchTime ?? null,
-    setColumns: payload.setColumns,
-    columnLabels: payload.columnLabels,
-    teams: normalizeTeams(payload.teams),
+    competition: payload.competition,
+    venue: payload.venue,
+    sets: payload.sets,
+    teams: payload.teams, // No need to normalize via helper for now as we trust the detailed transform
     createdAt: createdAt.toISOString(),
     ownerId: normalizedOwnerId
   };

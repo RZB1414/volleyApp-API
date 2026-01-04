@@ -9,6 +9,16 @@ export async function requireAuth(c: Context<AppEnv>, next: Next) {
   const header = c.req.header(AUTH_HEADER);
 
   if (!header || !header.startsWith('Bearer ')) {
+    // Check for Local Dev Key Bypass
+    const localKey = c.req.header('x-local-dev-key');
+    if (localKey && c.env.LOCAL_DEV_KEY && localKey === c.env.LOCAL_DEV_KEY) {
+      c.set('user', {
+        id: 'local-dev',
+        email: 'local@dev.env',
+        name: 'Local Developer'
+      });
+      return next();
+    }
     return c.json({ message: 'Authentication required' }, 401);
   }
 
