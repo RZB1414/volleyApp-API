@@ -1,4 +1,0 @@
-dotenv-package          Load configuration parameters from .env into
-                        environment variables
-load_dot_env            Load environment variables from the specified
-                        file

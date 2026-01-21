@@ -60,4 +60,11 @@ export type AppBindings = {
 
 export type AppEnv = {
   Bindings: AppBindings;
+  Variables: {
+    user: {
+      id: string;
+      email: string;
+      name: string;
+    };
+  };
 };

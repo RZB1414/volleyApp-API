@@ -1,33 +1,52 @@
 import { Hono, type Context } from 'hono';
 import type { AppEnv } from '../types';
-import { requireAuth } from '../middleware/auth'; //ainda nao usadooo!!!!
+
 
 const dvwRouter = new Hono<AppEnv>();
 
 // Helper to decompress and read file from R2
 async function getDecompressedFileContent(c: Context<AppEnv>, fileKey: string): Promise<string> {
-    const object = await c.env.VOLLEY_DATA.get(fileKey);
-    if (!object || !object.body) {
-        throw new Error('File not found or empty');
+    console.log(`[DEBUG] getDecompressedFileContent called for key: ${fileKey}`);
+
+    try {
+        const object = await c.env.VOLLEY_DATA.get(fileKey);
+        if (!object) {
+            console.error(`[DEBUG] File not found in R2: ${fileKey}`);
+            throw new Error('File not found');
+        }
+        if (!object.body) {
+            console.error(`[DEBUG] File body is empty: ${fileKey}`);
+            throw new Error('File body is empty');
+        }
+        console.log(`[DEBUG] File found. Size: ${object.size}`);
+
+        const decompressionStream = new DecompressionStream('gzip');
+        // Cast to any to avoid strict type mismatch between ReadableStream<Uint8Array> and WritableStream<BufferSource>
+        const decompressedStream = object.body.pipeThrough(decompressionStream as any);
+
+        console.log(`[DEBUG] Decompression stream created. Reading into buffer...`);
+        const fileBuffer = await new Response(decompressedStream).arrayBuffer();
+        console.log(`[DEBUG] Buffer read. ByteLength: ${fileBuffer.byteLength}`);
+
+        const uint8Array = new Uint8Array(fileBuffer);
+
+        // Handle large files by processing in chunks to avoid stack overflow
+        let binary = '';
+        const len = uint8Array.byteLength;
+        const chunkSize = 32768; // 32KB chunks
+
+        console.log(`[DEBUG] Converting to binary string. Length: ${len}`);
+        for (let i = 0; i < len; i += chunkSize) {
+            const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, len));
+            binary += String.fromCharCode(...chunk);
+        }
+
+        console.log(`[DEBUG] Conversion complete. Returning base64.`);
+        return btoa(binary);
+    } catch (e) {
+        console.error(`[DEBUG] Error inside getDecompressedFileContent:`, e);
+        throw e;
     }
-
-    const decompressionStream = new DecompressionStream('gzip');
-    // Cast to any to avoid strict type mismatch between ReadableStream<Uint8Array> and WritableStream<BufferSource>
-    const decompressedStream = object.body.pipeThrough(decompressionStream as any);
-    const fileBuffer = await new Response(decompressedStream).arrayBuffer();
-    const uint8Array = new Uint8Array(fileBuffer);
-
-    // Handle large files by processing in chunks to avoid stack overflow
-    let binary = '';
-    const len = uint8Array.byteLength;
-    const chunkSize = 32768; // 32KB chunks
-
-    for (let i = 0; i < len; i += chunkSize) {
-        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, len));
-        binary += String.fromCharCode(...chunk);
-    }
-
-    return btoa(binary);
 }
 
 // List all uploaded DVW files
@@ -124,8 +143,13 @@ dvwRouter.post('/player-actions', async (c) => {
             return c.json({ message: 'Failed to extract actions from R service', details: errText }, 502);
         }
 
-        const actions = await rResponse.json();
-        return c.json(actions);
+        // Stream the response directly to avoid parsing overhead
+        return new Response(rResponse.body, {
+            status: rResponse.status,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
     } catch (error) {
         console.error('Player Actions Proxy Error:', error);
@@ -168,8 +192,12 @@ dvwRouter.post('/player-actions-by-skill', async (c) => {
             return c.json({ message: 'Failed to extract grouped actions from R service', details: errText }, 502);
         }
 
-        const actions = await rResponse.json();
-        return c.json(actions);
+        return new Response(rResponse.body, {
+            status: rResponse.status,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
     } catch (error) {
         console.error('Player Actions By Skill Proxy Error:', error);
@@ -209,8 +237,12 @@ dvwRouter.post('/raw-plays', async (c) => {
             return c.json({ message: 'Failed to extract raw plays from R service', details: errText }, 502);
         }
 
-        const plays = await rResponse.json();
-        return c.json(plays);
+        return new Response(rResponse.body, {
+            status: rResponse.status,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
     } catch (error) {
         console.error('Raw Plays Proxy Error:', error);
@@ -237,7 +269,11 @@ dvwRouter.post('/meta', async (c) => {
             file_content: base64Content
         };
 
-        const rResponse = await fetch(`${c.env.R_PARSER_URL}/meta`, {
+        const targetUrl = `${c.env.R_PARSER_URL}/meta`;
+        console.log(`[DEBUG] Attempting fetch to R: ${targetUrl}`);
+        console.log(`[DEBUG] Payload size (approx): ${JSON.stringify(payload).length} chars`);
+
+        const rResponse = await fetch(targetUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -245,13 +281,19 @@ dvwRouter.post('/meta', async (c) => {
             body: JSON.stringify(payload),
         });
 
+        console.log(`[DEBUG] Fetch completed. Status: ${rResponse.status}`);
+
         if (!rResponse.ok) {
             const errText = await rResponse.text();
             return c.json({ message: 'Failed to extract meta data from R service', details: errText }, 502);
         }
 
-        const meta = await rResponse.json();
-        return c.json(meta);
+        return new Response(rResponse.body, {
+            status: rResponse.status,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
     } catch (error) {
         console.error('Meta Proxy Error:', error);
@@ -291,8 +333,12 @@ dvwRouter.post('/meta/filtered', async (c) => {
             return c.json({ message: 'Failed to extract filtered meta data from R service', details: errText }, 502);
         }
 
-        const meta = await rResponse.json();
-        return c.json(meta);
+        return new Response(rResponse.body, {
+            status: rResponse.status,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
 
     } catch (error) {
         console.error('Filtered Meta Proxy Error:', error);
