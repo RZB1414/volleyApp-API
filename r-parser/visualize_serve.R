@@ -84,7 +84,6 @@ serve_data <- tryCatch(
                 number = 7, 
                 fileKey = "raw/_2025-11-01_692965_Belchatow-ZAKSA_VM_.dvw"
             ),
-            add_headers("x-local-dev-key" = "super-secret-dev-key"),
             encode = "json",
             timeout(30)
         )
