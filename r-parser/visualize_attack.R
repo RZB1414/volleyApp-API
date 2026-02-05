@@ -121,16 +121,8 @@ function(req, res) {
             )
             
         # 4. Generate Layer Plot
-        plot_layer <- geom_volleyball(
-            league = "fivb",
-            display_range = "full",
-            court_units = "m",
-            color_updates = list(
-                court_apron = "transparent",
-                court = "transparent",
-                lines = "transparent"
-            )
-        ) +
+        plot_layer <- ggplot() +
+
         geom_segment(
             data = attack_plot_data,
             aes(
